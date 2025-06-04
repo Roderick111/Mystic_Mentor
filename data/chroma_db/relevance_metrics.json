@@ -1,0 +1,442 @@
+[
+  {
+    "question": "What are the different phases of the moon?",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides a detailed overview of the eight lunar phases, including their names and associated meanings. While it emphasizes the spiritual significance and personal development aspects of these phases, it still effectively answers the user's question about the different phases of the moon.",
+      "num_documents": 5,
+      "context_length": 5142,
+      "timestamp": 1749043601.826253
+    },
+    "timestamp": 1749043601.826442
+  },
+  {
+    "question": "What is the capital of France?",
+    "relevance_score": 0.0,
+    "details": {
+      "reasoning": "The retrieved context discusses lunar phases in ancient cultures and their significance, which is completely unrelated to the user's question about the capital of France.",
+      "num_documents": 5,
+      "context_length": 5120,
+      "timestamp": 1749043610.5200782
+    },
+    "timestamp": 1749043610.5215511
+  },
+  {
+    "question": "How does lunar gravity affect Earth?",
+    "relevance_score": 0.2,
+    "details": {
+      "reasoning": "The retrieved context primarily discusses the astrological and emotional influences of lunar phases on human behavior and emotions, rather than providing a scientific explanation of how lunar gravity affects Earth, particularly in terms of tides or other physical phenomena.",
+      "num_documents": 5,
+      "context_length": 5386,
+      "timestamp": 1749043613.459699
+    },
+    "timestamp": 1749043613.460169
+  },
+  {
+    "question": "And what about moon? How can it affect the mood? ",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about how the moon can affect mood by discussing the astrological perspective on the moon's influence on emotions, mental clarity, and subconscious activity. It provides specific examples of how different lunar phases are believed to impact mood and emotional states, making it highly relevant to the user's inquiry.",
+      "num_documents": 5,
+      "context_length": 4656,
+      "timestamp": 1749043961.471453
+    },
+    "timestamp": 1749043961.472063
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? ",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Waxing Gibbous phase of the moon, including its emotional and energetic influences, which could help explain the user's mood. It discusses themes of abundance, progress, and emotional states associated with this lunar phase, aligning well with the user's inquiry about the potential impact of the moon phase on their mood.",
+      "num_documents": 5,
+      "context_length": 5375,
+      "timestamp": 1749046048.4579682
+    },
+    "timestamp": 1749046048.458596
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? ",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Waxing Gibbous phase of the moon, including its emotional and energetic influences, which could help explain the user's mood. It discusses themes of abundance, progress, and potential restlessness, aligning well with the user's inquiry about the moon's effect on their mood.",
+      "num_documents": 5,
+      "context_length": 5375,
+      "timestamp": 1749046223.0248
+    },
+    "timestamp": 1749046223.025326
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? I feel sad ",
+    "relevance_score": 0.7,
+    "details": {
+      "reasoning": "The retrieved context discusses the Waxing Gibbous phase of the moon, which is relevant to the user's mention of feeling sad during this phase. It highlights the emotional and energetic influences of the Waxing Gibbous, including feelings of restlessness or stress, which could relate to the user's mood. However, it does not directly address the user's sadness or provide specific insights on how the moon phase might affect emotions, hence the score is not higher.",
+      "num_documents": 5,
+      "context_length": 5772,
+      "timestamp": 1749047451.3970728
+    },
+    "timestamp": 1749047451.397851
+  },
+  {
+    "question": "how's new moon affecting lives of people?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context provides a detailed explanation of how the new moon is believed to affect people's emotions, mental well-being, and personal development. It specifically mentions the new moon's association with calm, renewal, and introspection, which directly addresses the user's question about the new moon's effects on lives. The context also discusses the broader implications of lunar phases on human emotions, making it highly relevant.",
+      "num_documents": 5,
+      "context_length": 5584,
+      "timestamp": 1749047816.467438
+    },
+    "timestamp": 1749047816.468263
+  },
+  {
+    "question": "how's new moon affecting lives of people?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context provides a detailed explanation of how the new moon is believed to affect people's emotions, mental well-being, and personal development. It specifically mentions the new moon's association with calm, renewal, and introspection, which directly addresses the user's question about the new moon's effects on lives. The context also discusses the broader implications of lunar phases on human emotions, making it highly relevant.",
+      "num_documents": 5,
+      "context_length": 5584,
+      "timestamp": 1749048205.241693
+    },
+    "timestamp": 1749048205.242321
+  },
+  {
+    "question": "how's new moon affecting lives of people?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context provides a detailed explanation of how the new moon is believed to affect people's emotions, mental well-being, and personal development. It specifically mentions the new moon's association with calm, renewal, and introspection, which directly addresses the user's question about the new moon's effects on lives. The context also discusses the broader implications of lunar phases on human emotions, making it highly relevant.",
+      "num_documents": 5,
+      "context_length": 5584,
+      "timestamp": 1749048534.250238
+    },
+    "timestamp": 1749048534.250834
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? i feel sad",
+    "relevance_score": 0.7,
+    "details": {
+      "reasoning": "The retrieved context includes information about the Waxing Gibbous phase, which is relevant to the user's mention of it being a Waxing Gibbous today. It discusses the emotional and energetic influences of this phase, which could relate to the user's mood. However, it does not directly address the user's feelings of sadness or how the moon phase might specifically affect mood, which slightly reduces its relevance.",
+      "num_documents": 5,
+      "context_length": 5772,
+      "timestamp": 1749048617.495358
+    },
+    "timestamp": 1749048617.496526
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? i feel sad  ",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Waxing Gibbous phase of the moon, including its emotional and energetic influences, which can help explain the user's feelings of sadness. It discusses how lunar phases are believed to affect moods and emotional well-being, aligning well with the user's inquiry about the potential impact of the Waxing Gibbous on their mood.",
+      "num_documents": 5,
+      "context_length": 5772,
+      "timestamp": 1749051049.3071501
+    },
+    "timestamp": 1749051049.3078852
+  },
+  {
+    "question": "I feel anxious and restless today",
+    "relevance_score": 0.6,
+    "details": {
+      "reasoning": "The retrieved context discusses emotional influences during specific lunar phases, which may relate to feelings of anxiety and restlessness. However, it primarily focuses on practices for harnessing energy and self-care rather than directly addressing the user's feelings. While it offers some relevant insights into managing anxiety through practices like meditation and self-care, it does not directly respond to the user's emotional state.",
+      "num_documents": 5,
+      "context_length": 4762,
+      "timestamp": 1749053749.4063208
+    },
+    "timestamp": 1749053749.4072268
+  },
+  {
+    "question": "What does the new moon symbolize?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the symbolism of the New Moon, detailing its meanings related to new beginnings, introspection, and intention-setting. It provides a comprehensive understanding of the New Moon's significance, making it highly relevant.",
+      "num_documents": 5,
+      "context_length": 5368,
+      "timestamp": 1749053758.084427
+    },
+    "timestamp": 1749053758.0859258
+  },
+  {
+    "question": "I'm feeling disconnected from my spiritual self",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context discusses themes of introspection, reflection, and personal growth through lunar cycles, which are relevant to the user's feelings of disconnection from their spiritual self. The emphasis on self-reflection and the potential for spiritual attunement aligns well with the user's inquiry, suggesting ways to reconnect with their spiritual side.",
+      "num_documents": 5,
+      "context_length": 4551,
+      "timestamp": 1749053765.494208
+    },
+    "timestamp": 1749053765.4956539
+  },
+  {
+    "question": "I feel anxious and restless today",
+    "relevance_score": 0.6,
+    "details": {
+      "reasoning": "The retrieved context discusses emotional influences during specific lunar phases, which may relate to feelings of anxiety and restlessness. However, it primarily focuses on practices for harnessing energy and self-care rather than directly addressing the user's current emotional state. While it offers some relevant insights, it does not provide specific advice or coping strategies for anxiety and restlessness.",
+      "num_documents": 5,
+      "context_length": 4762,
+      "timestamp": 1749053777.2106571
+    },
+    "timestamp": 1749053777.212042
+  },
+  {
+    "question": "How do lunar phases affect emotions?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question by discussing how lunar phases are believed to influence human emotions, moods, and mental well-being. It provides specific examples of emotional responses associated with different lunar phases, such as Full Moons and New Moons, making it highly relevant to the inquiry about the effects of lunar phases on emotions.",
+      "num_documents": 5,
+      "context_length": 4978,
+      "timestamp": 1749053785.151675
+    },
+    "timestamp": 1749053785.1526148
+  },
+  {
+    "question": "What does the new moon symbolize?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the symbolism of the new moon, detailing its meanings such as new beginnings, introspection, and intention-setting. It provides a comprehensive understanding of the new moon's significance, making it highly relevant.",
+      "num_documents": 5,
+      "context_length": 5368,
+      "timestamp": 1749053794.125504
+    },
+    "timestamp": 1749053794.126935
+  },
+  {
+    "question": "I feel drawn to start something new during this moon phase",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's feeling of being drawn to start something new during the moon phase by discussing the New Moon's symbolism of new beginnings and the importance of setting intentions. It provides relevant insights into practices that align with this phase, making it highly relevant to the user's question.",
+      "num_documents": 5,
+      "context_length": 5233,
+      "timestamp": 1749053801.500648
+    },
+    "timestamp": 1749053801.502406
+  },
+  {
+    "question": "I feel anxious and restless today",
+    "relevance_score": 0.6,
+    "details": {
+      "reasoning": "The retrieved context discusses emotional influences during specific lunar phases, which may relate to feelings of anxiety and restlessness. However, it primarily focuses on practices for harnessing energy or promoting calmness rather than directly addressing the user's current emotional state. While some content may provide insights or coping strategies, it does not directly respond to the user's expression of anxiety and restlessness.",
+      "num_documents": 5,
+      "context_length": 4762,
+      "timestamp": 1749053812.122684
+    },
+    "timestamp": 1749053812.16645
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749053891.3510091
+    },
+    "timestamp": 1749053891.352854
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation by discussing its symbolism of new beginnings, the importance of setting intentions, and the role of introspection during this lunar phase. It provides a clear connection between the New Moon and the concept of manifestation.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749053902.879811
+    },
+    "timestamp": 1749053902.8812952
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749053910.745312
+    },
+    "timestamp": 1749053910.746563
+  },
+  {
+    "question": "How do lunar cycles affect my energy levels?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about how lunar cycles affect energy levels by discussing the emotional and energetic impacts of different lunar phases. It provides specific examples of how Full Moons and New Moons are associated with changes in energy and mood, which is highly relevant to the user's inquiry.",
+      "num_documents": 5,
+      "context_length": 4968,
+      "timestamp": 1749053918.6120691
+    },
+    "timestamp": 1749053918.613295
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation. It explains the New Moon as a time for new beginnings, setting intentions, and personal growth, which are all key aspects of manifestation practices.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749053927.951357
+    },
+    "timestamp": 1749053927.952087
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749053983.0596218
+    },
+    "timestamp": 1749053983.061162
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation. It explains the New Moon as a time for new beginnings, setting intentions, and personal growth, which are all key aspects of manifestation practices.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749053990.660985
+    },
+    "timestamp": 1749053990.662747
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749054001.8540769
+    },
+    "timestamp": 1749054001.855474
+  },
+  {
+    "question": "How do lunar cycles affect my energy levels?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about how lunar cycles affect energy levels by discussing the emotional and energetic impacts of lunar phases. It provides specific examples of how different phases, such as Full Moons and New Moons, are associated with changes in energy and mood, making it highly relevant to the user's inquiry.",
+      "num_documents": 5,
+      "context_length": 4968,
+      "timestamp": 1749054008.851061
+    },
+    "timestamp": 1749054008.854153
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation. It explains the New Moon as a time for new beginnings, setting intentions, and personal growth, which are all key aspects of manifestation practices.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749054016.6660988
+    },
+    "timestamp": 1749054016.666798
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749054416.535611
+    },
+    "timestamp": 1749054416.536711
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation. It explains the New Moon as a time for new beginnings, setting intentions, and personal growth, which are all key aspects of manifestation practices.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749054423.067543
+    },
+    "timestamp": 1749054423.0691981
+  },
+  {
+    "question": "I feel anxious about the upcoming full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the emotional intensity and potential anxieties associated with the full moon, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional challenges that can arise during this lunar phase, offering insights that may help the user understand and manage their anxiety.",
+      "num_documents": 5,
+      "context_length": 5488,
+      "timestamp": 1749054431.034156
+    },
+    "timestamp": 1749054431.0358799
+  },
+  {
+    "question": "How do lunar cycles affect my energy levels?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about how lunar cycles affect energy levels by discussing the emotional and energetic impacts of lunar phases. It provides specific examples of how different phases, such as Full Moons and New Moons, are associated with changes in energy and mood, making it highly relevant to the user's inquiry.",
+      "num_documents": 5,
+      "context_length": 4968,
+      "timestamp": 1749054438.497728
+    },
+    "timestamp": 1749054438.49827
+  },
+  {
+    "question": "What does the new moon mean for manifestation?",
+    "relevance_score": 1.0,
+    "details": {
+      "reasoning": "The retrieved context directly addresses the user's question about the New Moon and its significance for manifestation. It explains the New Moon as a time for new beginnings, setting intentions, and personal growth, which are all key aspects of manifestation practices.",
+      "num_documents": 5,
+      "context_length": 5335,
+      "timestamp": 1749054446.385185
+    },
+    "timestamp": 1749054446.386831
+  },
+  {
+    "question": "I feel anxious about the full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Full Moon's associations with heightened emotions and its dual nature, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional intensity of the Full Moon, which can help the user understand their anxiety in relation to this lunar phase.",
+      "num_documents": 5,
+      "context_length": 5508,
+      "timestamp": 1749054569.638604
+    },
+    "timestamp": 1749054569.639395
+  },
+  {
+    "question": "I feel anxious about the full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Full Moon's associations with heightened emotions and its dual nature, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional intensity of the Full Moon, which can help the user understand their anxiety in relation to this lunar phase.",
+      "num_documents": 5,
+      "context_length": 5508,
+      "timestamp": 1749054575.9719229
+    },
+    "timestamp": 1749054575.9727511
+  },
+  {
+    "question": "How does new moon affect emotions?",
+    "relevance_score": 0.9,
+    "details": {
+      "reasoning": "The retrieved context provides a detailed explanation of how lunar phases, particularly the New Moon, are believed to affect emotions, highlighting themes of calm, renewal, and introspection. It also discusses the broader connection between lunar cycles and human emotional states, making it highly relevant to the user's question about the emotional effects of the New Moon.",
+      "num_documents": 5,
+      "context_length": 5382,
+      "timestamp": 1749054582.6610281
+    },
+    "timestamp": 1749054582.662689
+  },
+  {
+    "question": "I feel anxious about the full moon",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Full Moon's associations with heightened emotions and its dual nature, which directly relates to the user's feelings of anxiety. It discusses both the celebratory aspects and the emotional intensity of the Full Moon, which can help the user understand their anxiety in relation to this lunar phase.",
+      "num_documents": 5,
+      "context_length": 5508,
+      "timestamp": 1749054591.59231
+    },
+    "timestamp": 1749054591.5935192
+  },
+  {
+    "question": "it is a Waxing Gibbous today, may be it affected my mood? i feel sad  ",
+    "relevance_score": 0.8,
+    "details": {
+      "reasoning": "The retrieved context provides relevant information about the Waxing Gibbous phase of the moon, including its emotional and energetic influences, which can help explain the user's feelings of sadness. It discusses how lunar phases are believed to affect moods and emotional well-being, aligning well with the user's inquiry about the potential impact of the Waxing Gibbous on their mood.",
+      "num_documents": 5,
+      "context_length": 5772,
+      "timestamp": 1749055251.522078
+    },
+    "timestamp": 1749055251.522631
+  }
+]
