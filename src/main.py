@@ -3,7 +3,7 @@
 Esoteric AI Agent - Main Application
 
 Multi-agent system with emotional and logical response modes,
-domain-aware RAG retrieval, and semantic domain activation hints.
+domain-aware RAG retrieval, and Q&A cache optimization.
 """
 
 from dotenv import load_dotenv
@@ -20,6 +20,7 @@ from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
 from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
+from cache.qa_cache import QACache
 
 load_dotenv()
 
@@ -30,7 +31,8 @@ llm = init_chat_model("gemini-2.0-flash-001", model_provider="google_genai")
 domain_manager = DomainManager(initial_domains={'lunar', 'ifs'})
 semantic_detector = SemanticDomainDetector()
 negative_detector = NegativeIntentDetector()
-rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager, enable_precomputed=True)
+qa_cache = QACache()
+rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)
 
 class CombinedDecision(BaseModel):
     """Combined classification and RAG decision for optimal performance."""
@@ -89,7 +91,7 @@ def router(state: State):
     return {"next": "therapist" if message_type == "emotional" else "logical"}
 
 def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
-    """Get RAG context with caching optimization."""
+    """Get RAG context with Q&A cache optimization."""
     try:
         if not should_use_rag:
             return {"type": "no_rag", "content": ""}
@@ -97,18 +99,34 @@ def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
         # Check for negative intent - if detected, skip cache and force RAG
         force_rag = negative_detector.has_negative_intent(user_message)
         
-        # Legacy pre-computed cache disabled - using unified vector database approach
-        # (Negative intent detection still active to bypass query cache when needed)
+        # Get active domains for filtering
+        active_domains = rag_system.get_domain_status().get("active_domains", [])
         
-        # If negative intent was detected, log the cache bypass
+        # Step 1: Q&A Cache Search (unless negative intent detected)
+        if not force_rag:
+            qa_result = qa_cache.search_qa(user_message, active_domains, k=3)
+            if qa_result:
+                print(f"⚡ Q&A Cache Hit! Similarity: {qa_result['similarity']:.3f} for: '{user_message[:50]}...'")
+                return {
+                    "type": "qa_cache_hit",
+                    "content": qa_result['answer'],
+                    "metadata": {
+                        "question": qa_result['question'],
+                        "domain": qa_result['domain'],
+                        "source": qa_result['source'],
+                        "similarity": qa_result['similarity'],
+                        "qa_id": qa_result['qa_id'],
+                        "response_time": qa_result['response_time']
+                    }
+                }
+        
+        # Step 2: Regular RAG Search (if Q&A cache missed or negative intent)
+        return_type = "negative_intent_bypass" if force_rag else "rag_context"
+        
         if force_rag:
-            print(f"🛡️ Negative intent detected - bypassing cache, using RAG for: '{user_message[:50]}...'")
-            return_type = "negative_intent_bypass"
-        else:
-            return_type = "rag_context"
+            print(f"🛡️ Negative intent detected - bypassing Q&A cache, using RAG for: '{user_message[:50]}...'")
         
         # Use RAG system for retrieval with domain filtering
-        # (Note: Negative intent queries automatically bypass cache and use RAG)
         rag_result = rag_system.query(user_message, k=4)
         
         # Check if we got chunks
@@ -241,9 +259,12 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     # Handle different types of RAG responses
     if rag_type == "domain_blocked":
         return {"messages": [AIMessage(content=rag_context)], "rag_context": "domain_blocked"}
+    elif rag_type == "qa_cache_hit":
+        # Direct Q&A cache hit - return the answer directly
+        return {"messages": [AIMessage(content=rag_context)], "rag_context": "qa_cache_hit"}
     elif rag_context:
         context_verb = "guidance" if agent_type == "emotional" else "teaching"
-        system_content += f"\n\nUse this knowledge to inform your {context_verb}:{rag_context}"
+        system_content += f"\n\nUse this knowledge to inform your {context_verb}:{rag_context}. Never reference chunk numbers or sources, speak as if the wisdom flows directly from your own understanding."
     
     # Create conversation and get response
     conversation_messages = [{"role": "system", "content": system_content}]
@@ -289,9 +310,15 @@ def print_stats():
         if perf:
             print(f"⚡ RAG: {perf.get('total_queries', 0)} queries, {perf.get('avg_response_time', 0):.3f}s avg")
         
-        # Cache and safety stats
+        # Q&A Cache stats
+        qa_stats = qa_cache.get_stats()
+        print(f"⚡ Q&A Cache: {qa_stats['total_qa_pairs']} pairs, {qa_stats['hit_rate']:.1f}% hit rate")
+        if qa_stats['total_queries'] > 0:
+            print(f"📊 Q&A Queries: {qa_stats['total_queries']} total, {qa_stats['avg_response_time']:.3f}s avg")
+        
+        # Safety and database stats
         print("🛡️ Negative intent detection: Active (bypasses cache, forces RAG)")
-        print("🧠 Unified vector database: 1141 documents across all domains")
+        print(f"🧠 Unified vector database: {stats.get('total_chunks', 0)} documents across all domains")
         
         # Domain detection stats
         if semantic_detector.is_available():
@@ -307,7 +334,7 @@ def run_chatbot():
     state = {"messages": [], "message_type": None, "should_use_rag": None, "rag_context": None}
     
     print("🤖 Esoteric AI Agent")
-    print("Commands: 'exit', 'stats', 'domains', 'cache clear', 'cache stats clear', 'domains enable <domain>', 'domains disable <domain>'")
+    print("Commands: 'exit', 'stats', 'domains', 'cache clear', 'cache stats clear', 'qa cache clear', 'domains enable <domain>', 'domains disable <domain>'")
     print()
     
     while True:
@@ -322,11 +349,8 @@ def run_chatbot():
             continue
         elif user_input == "cache clear":
             try:
-                if hasattr(rag_system, 'query_cache') and rag_system.query_cache:
-                    rag_system.query_cache.clear_cache()
-                    print("✅ Cache cleared")
-                else:
-                    print("ℹ️ Cache not enabled")
+                rag_system.clear_caches()
+                print("✅ RAG caches cleared")
             except Exception as e:
                 print(f"❌ Clear failed: {e}")
             continue
@@ -336,6 +360,13 @@ def run_chatbot():
                 print("✅ Query statistics cleared")
             except Exception as e:
                 print(f"❌ Clear stats failed: {e}")
+            continue
+        elif user_input == "qa cache clear":
+            try:
+                qa_cache.clear_cache()
+                print("✅ Q&A cache cleared")
+            except Exception as e:
+                print(f"❌ Q&A cache clear failed: {e}")
             continue
         elif user_input == "domains":
             try:
@@ -383,8 +414,8 @@ def run_chatbot():
             
             # Response type indicators
             cache_indicator = ""
-            if rag_context == "pre-computed":
-                cache_indicator = "⚡ "  # Direct cache hit
+            if rag_context == "qa_cache_hit":
+                cache_indicator = "⚡ "  # Q&A cache hit
             elif rag_context == "negative_intent_bypass":
                 cache_indicator = "🛡️ "  # Negative intent bypassed cache
             elif rag_context == "domain_blocked":
@@ -412,4 +443,3 @@ if __name__ == "__main__":
     
     run_chatbot()
 
-                                      

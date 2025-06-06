@@ -67,7 +67,7 @@ class SimpleDocumentManager:
     def _load_registry(self):
         """Load document registry from file"""
         try:
-        if os.path.exists(self.registry_path):
+            if os.path.exists(self.registry_path):
                 with open(self.registry_path, 'r') as f:
                     data = json.load(f)
                     self.registry = {}
@@ -79,9 +79,9 @@ class SimpleDocumentManager:
                 print(f"📋 Loaded {len(self.registry)} documents from registry")
             else:
                 print("📋 Starting with empty registry")
-            except Exception as e:
-                print(f"⚠️  Error loading registry: {e}")
-                self.registry = {}
+        except Exception as e:
+            print(f"⚠️  Error loading registry: {e}")
+            self.registry = {}
     
     def _save_registry(self):
         """Save document registry to file"""
@@ -204,7 +204,7 @@ Context: [Your 2-3 sentence summary focusing on the Q&A content]
 
 [Original chunk content]"""
                 else:
-        prompt = f"""You are helping to improve document retrieval by adding context to text chunks.
+                    prompt = f"""You are helping to improve document retrieval by adding context to text chunks.
 
 Document Title: {document_title}
 Domain: {domain}
@@ -613,9 +613,9 @@ Context: [Your 2-3 sentence summary]
             if not os.path.exists(record.filepath):
                 issues["missing_files"].append(record.filepath)
             else:
-            current_hash = self._get_file_hash(record.filepath)
-            if current_hash != record.file_hash:
-                issues["changed_files"].append(record.filepath)
+                current_hash = self._get_file_hash(record.filepath)
+                if current_hash != record.file_hash:
+                    issues["changed_files"].append(record.filepath)
         
         return issues
     
@@ -779,7 +779,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"❌ Batch processing failed: {e}")
             sys.exit(1)
-        
-        else:
+    
+    else:
         print(f"❌ Command '{args.command}' not yet implemented in this version")
         sys.exit(1) 

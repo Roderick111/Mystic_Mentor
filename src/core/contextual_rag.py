@@ -26,19 +26,10 @@ from langchain_chroma import Chroma
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 try:
-    from cache.query_similarity_cache import QuerySimilarityCache
     from core.domain_manager import DomainManager  
     from core.stats_collector import StatsCollector
 except ImportError as e:
-
-    
-    class DummyQueryCache:
-        def __init__(self):
-            self.queries_cache = {}
-        def get_cached_response(self, query): return None, 0
-        def add_query_response(self, query, response): pass
-        def clear_cache(self): pass
-    
+    # Dummy classes for graceful degradation
     class DummyDomainManager:
         def __init__(self, active_domains=None): 
             self.active_domains = active_domains or {'lunar'}
@@ -55,7 +46,6 @@ except ImportError as e:
         def get_performance_summary(self): return "Stats not available"
         def reset_query_stats(self): pass
     
-    QuerySimilarityCache = DummyQueryCache
     DomainManager = DummyDomainManager
     StatsCollector = DummyStatsCollector
 
@@ -70,22 +60,16 @@ class OptimizedContextualRAGSystem:
     - Direct chunk retrieval (no intermediate AI generation)
     - Multi-domain document filtering  
     - Domain-aware query classification
-    - Query similarity caching
-    - Pre-computed response lookup
     - Performance monitoring
     """
     
     def __init__(self, 
                  chroma_path: str = "data/chroma_db",
                  collection_name: str = "contextual_rag_collection",
-                 enable_precomputed: bool = True, 
-                 enable_query_cache: bool = True,
                  domain_manager = None):
         """Initialize the RAG system with domain manager for filtering."""
         self.chroma_path = chroma_path
         self.collection_name = collection_name
-        self.enable_precomputed = enable_precomputed
-        self.enable_query_cache = enable_query_cache
         self.domain_manager = domain_manager
         
         # Initialize stats collector
@@ -105,11 +89,6 @@ class OptimizedContextualRAGSystem:
         # Initialize vector store
         self.vectorstore = None
         self._setup_vectorstore()
-        
-        # Precomputed cache disabled (redundant with vector database)
-        
-        if self.enable_query_cache:
-            self.query_cache = QuerySimilarityCache()
         
         if self.domain_manager:
             print(f"✅ RAG System ready - {len(self.domain_manager.get_active_domains())} domains active")
@@ -262,17 +241,11 @@ class OptimizedContextualRAGSystem:
     
     def enable_domain(self, domain: str) -> bool:
         """Enable a knowledge domain."""
-        result = self.domain_manager.enable_domain(domain)
-        if result and self.enable_query_cache and self.query_cache:
-            self.query_cache.clear_cache()
-        return result
+        return self.domain_manager.enable_domain(domain)
     
     def disable_domain(self, domain: str) -> bool:
         """Disable a knowledge domain."""
-        result = self.domain_manager.disable_domain(domain)
-        if result and self.enable_query_cache and self.query_cache:
-            self.query_cache.clear_cache()
-        return result
+        return self.domain_manager.disable_domain(domain)
     
     def get_domain_status(self) -> Dict[str, Any]:
         """Get current domain configuration status."""
@@ -284,8 +257,8 @@ class OptimizedContextualRAGSystem:
             domain_manager=self.domain_manager,
             vectorstore=self.vectorstore,
             lunar_cache=None,  # Disabled - using unified vector database
-            query_cache=self.query_cache if self.enable_query_cache else None,
-            query_cache_enabled=self.enable_query_cache,
+            query_cache=None,  # Using Q&A cache instead
+            query_cache_enabled=False,
             persist_directory=self.chroma_path
         )
     
@@ -295,11 +268,6 @@ class OptimizedContextualRAGSystem:
     
     def clear_caches(self):
         """Clear all caching systems."""
-        if self.enable_query_cache and self.query_cache:
-            self.query_cache.clear_cache()
-        
-        # Legacy lunar cache removed - using unified vector database approach
-        
         self.stats_collector.reset_query_stats()
         print("✅ Caches cleared")
     
@@ -311,6 +279,4 @@ class OptimizedContextualRAGSystem:
         """Detailed representation of the RAG system."""
         return (f"OptimizedContextualRAGSystem("
                 f"chroma_path='{self.chroma_path}', "
-                f"domains={self.domain_manager.get_active_domains()}, "
-                f"query_cache={self.enable_query_cache}, "
-                f"precomputed={self.enable_precomputed})") 
+                f"domains={self.domain_manager.get_active_domains()})") 
