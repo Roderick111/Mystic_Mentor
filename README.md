@@ -25,7 +25,7 @@ esoteric-vectors/
 │   │   └── relevance_evaluator.py # RAG relevance evaluation
 │   ├── cache/                    # Caching systems
 │   │   ├── query_similarity_cache.py     # Semantic query caching
-│   │   └── precomputed_lunar_responses.py # Pre-computed answers
+│   │   └── negative_intent_detector.py # Safety filtering for cache queries
 │   └── utils/                    # Utility modules
 │       └── lunar_calculator.py   # Lunar phase calculations
 ├── tests/                        # Test suites
