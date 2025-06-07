@@ -2,8 +2,11 @@
 """
 Esoteric AI Agent - Main Application
 
-Multi-agent system with emotional and logical response modes,
-domain-aware RAG retrieval, and Q&A cache optimization.
+Clean multi-agent system with:
+- Emotional and logical response modes
+- Domain-aware RAG retrieval
+- Q&A cache optimization
+- Clean logging and error handling
 """
 
 from dotenv import load_dotenv
@@ -21,6 +24,7 @@ from core.domain_manager import DomainManager
 from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
+from utils.logger import logger, set_debug_mode
 
 load_dotenv()
 
@@ -91,7 +95,7 @@ def router(state: State):
     return {"next": "therapist" if message_type == "emotional" else "logical"}
 
 def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
-    """Get RAG context with Q&A cache optimization."""
+    """Get RAG context with Q&A cache optimization and clean logging."""
     try:
         if not should_use_rag:
             return {"type": "no_rag", "content": ""}
@@ -106,7 +110,7 @@ def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
         if not force_rag:
             qa_result = qa_cache.search_qa(user_message, active_domains, k=3)
             if qa_result:
-                print(f"⚡ Q&A Cache Hit! Similarity: {qa_result['similarity']:.3f} for: '{user_message[:50]}...'")
+                logger.qa_cache_hit(qa_result['similarity'], user_message[:50])
                 return {
                     "type": "qa_cache_hit",
                     "content": qa_result['answer'],
@@ -124,7 +128,7 @@ def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
         return_type = "negative_intent_bypass" if force_rag else "rag_context"
         
         if force_rag:
-            print(f"🛡️ Negative intent detected - bypassing Q&A cache, using RAG for: '{user_message[:50]}...'")
+            logger.negative_intent(user_message[:50])
         
         # Use RAG system for retrieval with domain filtering
         rag_result = rag_system.query(user_message, k=4)
@@ -144,7 +148,7 @@ def get_rag_context(user_message: str, should_use_rag: bool) -> dict:
         
         return {"type": "no_rag", "content": ""}
     except Exception as e:
-        print(f"❌ RAG Error: {e}")
+        logger.error(f"RAG Error: {e}")
         return {"type": "no_rag", "content": ""}
 
 def build_domain_guidance(active_domains: list, agent_type: str) -> str:
@@ -248,13 +252,12 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
                 }
                 domain_display_name = domain_display_names.get(detected_domain, detected_domain.title())
                 
-                # Add domain activation guidance
-                if agent_type == "emotional":
-                    system_content += f"\n\nNOTE: The user is asking about {domain_display_name}, which isn't currently active. Acknowledge your current limitations in this area, provide relevant wisdom and mention they can activate specialized knowledge in this domain."
-                else:
-                    system_content += f"\n\nNOTE: The user is asking about {domain_display_name}, which isn't currently active. Be honest about your limited expertise in this domain, provide relevant wisdom and suggest they can access specialized teachings by activating this domain."
+                suggestion_message = f"\n\n💡 I notice your question relates to {domain_display_name}. Would you like me to enable this knowledge domain for more detailed guidance? (Type 'domains enable {detected_domain}' to activate)"
+                
+                # Add suggestion to system content for context
+                system_content += f"\n\nNote: The user's question relates to {domain_display_name} domain which is currently inactive. Provide a helpful response with available knowledge and mention the domain activation option."
         except Exception as e:
-            print(f"⚠️  Domain detection error: {e}")
+            logger.debug(f"Domain suggestion error: {e}")
     
     # Handle different types of RAG responses
     if rag_type == "domain_blocked":
@@ -278,11 +281,11 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     return {"messages": [AIMessage(content=reply.content)], "rag_context": rag_context}
 
 def therapist_agent(state: State):
-    """Emotional/therapeutic agent."""
+    """Emotional healing and guidance agent."""
     return create_agent_response(state, "emotional")
 
 def logical_agent(state: State):
-    """Logical/teaching agent."""
+    """Logical teaching and explanation agent."""
     return create_agent_response(state, "logical")
 
 # Build the agent graph
@@ -305,9 +308,13 @@ def print_stats():
     try:
         # RAG system stats
         stats = rag_system.get_stats()
-        print(f"📊 RAG: {stats.get('total_chunks', 0)} chunks, {len(stats.get('active_domains', []))} domains")
+        total_chunks = stats.get('vectorstore_docs', 0)
+        active_domains = len(stats.get('domain_config', {}).get('active_domains', []))
+        
+        print(f"📊 RAG: {total_chunks} chunks, {active_domains} domains active")
+        
         perf = stats.get('query_performance', {})
-        if perf:
+        if perf.get('total_queries', 0) > 0:
             print(f"⚡ RAG: {perf.get('total_queries', 0)} queries, {perf.get('avg_response_time', 0):.3f}s avg")
         
         # Q&A Cache stats
@@ -316,130 +323,145 @@ def print_stats():
         if qa_stats['total_queries'] > 0:
             print(f"📊 Q&A Queries: {qa_stats['total_queries']} total, {qa_stats['avg_response_time']:.3f}s avg")
         
-        # Safety and database stats
-        print("🛡️ Negative intent detection: Active (bypasses cache, forces RAG)")
-        print(f"🧠 Unified vector database: {stats.get('total_chunks', 0)} documents across all domains")
+        # System health
+        resilience_health = stats.get('resilience_health', {})
+        if resilience_health.get('overall_healthy'):
+            print("🛡️ System Health: All services operational")
+        else:
+            print("⚠️ System Health: Some services degraded")
         
         # Domain detection stats
         if semantic_detector.is_available():
             detector_stats = semantic_detector.get_stats()
             print(f"🔍 Domain Detection: {detector_stats['cache_hits']} cache hits, {detector_stats['domains_loaded']} domains loaded")
         else:
-            print("⚠️  Domain detection not available")
+            logger.debug("Domain detection not available")
+            
     except Exception as e:
-        print(f"❌ Stats failed: {e}")
+        logger.error(f"Stats error: {e}")
+
+def handle_command(user_input: str) -> bool:
+    """Handle system commands. Returns True if command was handled."""
+    try:
+        if user_input == "stats":
+            print_stats()
+            return True
+        elif user_input == "cache clear":
+            rag_system.clear_caches()
+            return True
+        elif user_input == "cache stats clear":
+            rag_system.stats_collector.reset_query_stats()
+            logger.command_executed("Query statistics cleared")
+            return True
+        elif user_input == "qa cache clear":
+            qa_cache.clear_cache()
+            return True
+        elif user_input == "domains":
+            status = rag_system.get_domain_status()
+            active = ', '.join(status['active_domains']) if status['active_domains'] else 'None'
+            print(f"🎯 Active: {active}")
+            print(f"Available: {', '.join(status['available_domains'])}")
+            return True
+        elif user_input.startswith("domains enable "):
+            domain = user_input.replace("domains enable ", "").strip()
+            if rag_system.enable_domain(domain):
+                logger.command_executed(f"Domain '{domain}' enabled")
+            else:
+                logger.error(f"Failed to enable domain '{domain}'")
+            return True
+        elif user_input.startswith("domains disable "):
+            domain = user_input.replace("domains disable ", "").strip()
+            if rag_system.disable_domain(domain):
+                logger.command_executed(f"Domain '{domain}' disabled")
+            else:
+                logger.error(f"Failed to disable domain '{domain}'")
+            return True
+        elif user_input == "debug on":
+            set_debug_mode(True)
+            return True
+        elif user_input == "debug off":
+            set_debug_mode(False)
+            return True
+        
+        return False
+    except Exception as e:
+        logger.error(f"Command failed: {e}")
+        return True
 
 def run_chatbot():
-    """Main chatbot loop with command handling."""
+    """Main chatbot loop with clean command handling."""
     state = {"messages": [], "message_type": None, "should_use_rag": None, "rag_context": None}
     
+    # System ready message with active domains
+    stats = rag_system.get_stats()
+    total_chunks = stats.get('vectorstore_docs', 0)
+    active_domains = stats.get('domain_config', {}).get('active_domains', [])
+    
+    logger.system_ready(f"Ready with {total_chunks} chunks")
+    
+    # Show active domains in normal mode
+    if active_domains:
+        active_domains_str = ', '.join(active_domains)
+        print(f"🎯 Active domains: {active_domains_str}")
+    else:
+        print("🎯 Active domains: None")
+    
     print("🤖 Esoteric AI Agent")
-    print("Commands: 'exit', 'stats', 'domains', 'cache clear', 'cache stats clear', 'qa cache clear', 'domains enable <domain>', 'domains disable <domain>'")
+    print("Commands: 'exit', 'stats', 'domains', 'cache clear', 'cache stats clear', 'qa cache clear', 'domains enable <domain>', 'domains disable <domain>', 'debug on/off'")
     print()
     
     while True:
         user_input = input("Message: ")
         
-        # Handle commands
+        # Handle exit
         if user_input == "exit":
             print("Bye...")
             break
-        elif user_input == "stats":
-            print_stats()
-            continue
-        elif user_input == "cache clear":
-            try:
-                rag_system.clear_caches()
-                print("✅ RAG caches cleared")
-            except Exception as e:
-                print(f"❌ Clear failed: {e}")
-            continue
-        elif user_input == "cache stats clear":
-            try:
-                rag_system.stats_collector.reset_query_stats()
-                print("✅ Query statistics cleared")
-            except Exception as e:
-                print(f"❌ Clear stats failed: {e}")
-            continue
-        elif user_input == "qa cache clear":
-            try:
-                qa_cache.clear_cache()
-                print("✅ Q&A cache cleared")
-            except Exception as e:
-                print(f"❌ Q&A cache clear failed: {e}")
-            continue
-        elif user_input == "domains":
-            try:
-                status = rag_system.get_domain_status()
-                active = ', '.join(status['active_domains']) if status['active_domains'] else 'None'
-                print(f"🎯 Active: {active}")
-                print(f"Available: {', '.join(status['available_domains'])}")
-            except Exception as e:
-                print(f"❌ Domain status failed: {e}")
-            continue
-        elif user_input.startswith("domains enable "):
-            domain = user_input[15:].strip().lower()
-            try:
-                if rag_system.enable_domain(domain):
-                    active = ', '.join(rag_system.get_domain_status()['active_domains'])
-                    print(f"🎯 Active: {active}")
-                else:
-                    status = rag_system.get_domain_status()
-                    print(f"Available: {', '.join(status['available_domains'])}")
-            except Exception as e:
-                print(f"❌ Enable failed: {e}")
-            continue
-        elif user_input.startswith("domains disable "):
-            domain = user_input[16:].strip().lower()
-            try:
-                if rag_system.disable_domain(domain):
-                    status = rag_system.get_domain_status()
-                    active = ', '.join(status['active_domains']) if status['active_domains'] else 'None'
-                    print(f"🎯 Active: {active}")
-                else:
-                    print(f"❌ Domain not active")
-            except Exception as e:
-                print(f"❌ Disable failed: {e}")
+        
+        # Handle commands
+        if handle_command(user_input):
             continue
         
         # Process user message
-        user_message = HumanMessage(content=user_input)
-        state["messages"] = state.get("messages", []) + [user_message]
-        state = graph.invoke(state)
-
-        # Display response with cache indicators
-        if state.get("messages") and len(state["messages"]) > 0:
-            last_message = state["messages"][-1]
-            rag_context = state.get("rag_context")
+        try:
+            # Add user message to state
+            state["messages"].append(HumanMessage(content=user_input))
             
-            # Response type indicators
-            cache_indicator = ""
-            if rag_context == "qa_cache_hit":
-                cache_indicator = "⚡ "  # Q&A cache hit
-            elif rag_context == "negative_intent_bypass":
-                cache_indicator = "🛡️ "  # Negative intent bypassed cache
-            elif rag_context == "domain_blocked":
-                cache_indicator = "🚫 "  # Domain blocked
-            elif rag_context:
-                cache_indicator = "🔍 "  # RAG used
+            # Process through agent graph
+            result = graph.invoke(state)
             
-            if hasattr(last_message, 'content'):
-                print(f"{cache_indicator}Assistant: {last_message.content}")
-            elif isinstance(last_message, dict) and 'content' in last_message:
-                print(f"{cache_indicator}Assistant: {last_message['content']}")
+            # Update state with result
+            state.update(result)
+            
+            # Display response with cache indicators
+            if state.get("messages") and len(state["messages"]) > 0:
+                last_message = state["messages"][-1]
+                rag_context = state.get("rag_context")
+                
+                # Response type indicators
+                cache_indicator = ""
+                if rag_context == "qa_cache_hit":
+                    cache_indicator = "⚡ "  # Q&A cache hit
+                elif rag_context == "negative_intent_bypass":
+                    cache_indicator = "🛡️ "  # Negative intent bypassed cache
+                elif rag_context == "domain_blocked":
+                    cache_indicator = "🚫 "  # Domain blocked
+                elif rag_context:
+                    cache_indicator = "🔍 "  # RAG used
+                
+                if hasattr(last_message, 'content'):
+                    print(f"{cache_indicator}Assistant: {last_message.content}")
+                elif isinstance(last_message, dict) and 'content' in last_message:
+                    print(f"{cache_indicator}Assistant: {last_message['content']}")
+                else:
+                    print(f"{cache_indicator}Assistant: {last_message}")
             else:
-                print(f"{cache_indicator}Assistant: {last_message}")
+                logger.error("No response generated")
+                
+        except Exception as e:
+            logger.error(f"Processing error: {e}")
+            print("I encountered an error processing your message. Please try again.")
 
 if __name__ == "__main__":
-    try:
-        stats = rag_system.get_stats()
-        total_chunks = stats.get('total_chunks', 0)
-        if total_chunks > 0:
-            print(f"✅ Ready with {total_chunks} chunks")
-        else:
-            print("⚠️ No documents loaded")
-    except Exception as e:
-        print(f"⚠️ Status check failed: {e}")
-    
     run_chatbot()
 

@@ -206,6 +206,278 @@ qa.add_qa_document('data/qa/your_file.md', 'domain_name')
 - **Q&A Documents** (`data/qa/`): Question-answer pairs, chunked at 2000 chars
 - **Domain Classification**: lunar, ifs, crystals, astrology, tarot, numerology, archetypes
 
+## 🛠️ Advanced Document Management Commands
+
+### Document Manager CLI (`document_manager.py`)
+
+The document manager provides comprehensive document processing with parallel contextualization and batch operations.
+
+#### **Basic Commands**
+
+```bash
+# Add a single document
+python document_manager.py add <filepath> --domain <domain>
+
+# Add with contextualization (default: enabled)
+python document_manager.py add docs/crystals.md --domain crystals
+
+# Add without contextualization (faster, less optimal retrieval)
+python document_manager.py add docs/crystals.md --domain crystals --no-contextualize
+
+# Add Q&A document with specialized chunking
+python document_manager.py add data/qa/lunar_qa.md --domain lunar --doc-type qa
+```
+
+#### **Batch Operations**
+
+```bash
+# Create batch file (JSON format)
+cat > batch_docs.json << EOF
+[
+  {"filepath": "docs/astrology.md", "domain": "astrology"},
+  {"filepath": "docs/tarot.md", "domain": "tarot"},
+  {"filepath": "data/qa/crystals_qa.md", "domain": "crystals"}
+]
+EOF
+
+# Process batch with parallel workers
+python document_manager.py batch batch_docs.json
+
+# Batch with custom settings
+python document_manager.py batch batch_docs.json --workers 8 --batch-size 50 --no-contextualize
+```
+
+#### **Document Management**
+
+```bash
+# Update existing document
+python document_manager.py update docs/ifs.md --domain ifs
+
+# Remove document
+python document_manager.py remove docs/old_file.md
+
+# List all documents
+python document_manager.py list
+
+# List by domain
+python document_manager.py list --domain lunar
+
+# Get document information
+python document_manager.py info docs/crystals.md
+```
+
+#### **Validation & Maintenance**
+
+```bash
+# Validate document integrity
+python document_manager.py validate
+
+# Validate specific domain
+python document_manager.py validate --domain astrology
+
+# Fix vectorstore inconsistencies
+python document_manager.py fix
+
+# Fix specific domain issues
+python document_manager.py fix --domain crystals
+```
+
+#### **Advanced Configuration**
+
+```bash
+# Custom parallel processing
+python document_manager.py add docs/large_file.md --domain lunar --workers 12
+
+# Custom batch size for vectorstore operations
+python document_manager.py add docs/file.md --domain ifs --batch-size 200
+
+# Custom timeout for AI contextualization
+python document_manager.py add docs/file.md --domain tarot --timeout 60.0
+```
+
+### Q&A Cache Management (`qa_cache.py`)
+
+The Q&A cache provides specialized management for question-answer pairs with semantic similarity search.
+
+#### **Programmatic Usage**
+
+```python
+import sys
+sys.path.insert(0, 'src')
+from cache.qa_cache import QACache
+
+# Initialize Q&A cache
+qa = QACache()
+
+# Add single Q&A pair
+qa.add_qa_pair(
+    question="What is the meaning of the full moon?",
+    answer="The full moon represents completion, manifestation, and peak energy...",
+    domain="lunar",
+    source="manual"
+)
+
+# Batch add Q&A pairs
+qa_pairs = [
+    {
+        "question": "How do I cleanse crystals?",
+        "answer": "Crystals can be cleansed using moonlight, sage, or running water...",
+        "domain": "crystals",
+        "source": "batch_import"
+    },
+    {
+        "question": "What is shadow work?",
+        "answer": "Shadow work involves integrating rejected aspects of the self...",
+        "domain": "archetypes",
+        "source": "batch_import"
+    }
+]
+qa._add_documents_batch(qa_pairs, batch_size=50)
+
+# Search Q&A cache
+result = qa.search_qa("moon phases", active_domains=["lunar"], k=3)
+if result:
+    print(f"Question: {result['question']}")
+    print(f"Answer: {result['answer']}")
+    print(f"Similarity: {result['similarity']:.3f}")
+
+# Get cache statistics
+stats = qa.get_stats()
+print(f"Total Q&A pairs: {stats['total_qa_pairs']}")
+print(f"Hit rate: {stats['hit_rate']:.1f}%")
+print(f"Average response time: {stats['avg_response_time']:.3f}s")
+
+# Get collection information with health metrics
+info = qa.get_collection_info()
+print(f"Health status: {info['health']['hit_rate_status']}")
+print(f"Domain distribution: {info['domain_distribution']}")
+
+# Update collection metadata
+qa.update_collection_metadata({
+    "version": "1.3.0",
+    "description": "Updated Q&A cache with enhanced features"
+})
+
+# Clear cache
+qa.clear_cache()
+```
+
+#### **Command Line Utilities**
+
+```bash
+# Quick Q&A cache operations
+python -c "
+import sys; sys.path.insert(0, 'src')
+from cache.qa_cache import QACache
+qa = QACache()
+
+# Show cache stats
+stats = qa.get_stats()
+print(f'Q&A Cache: {stats[\"total_qa_pairs\"]} pairs, {stats[\"hit_rate\"]:.1f}% hit rate')
+
+# Show domain distribution
+domains = qa.get_domain_stats()
+for domain, count in domains.items():
+    print(f'{domain}: {count} pairs')
+"
+
+# Clear Q&A cache
+python -c "
+import sys; sys.path.insert(0, 'src')
+from cache.qa_cache import QACache
+qa = QACache()
+qa.clear_cache()
+print('Q&A cache cleared')
+"
+
+# Test Q&A search
+python -c "
+import sys; sys.path.insert(0, 'src')
+from cache.qa_cache import QACache
+qa = QACache()
+result = qa.search_qa('moon phases')
+if result:
+    print(f'Found: {result[\"question\"]} (similarity: {result[\"similarity\"]:.3f})')
+else:
+    print('No matching Q&A found')
+"
+```
+
+#### **Integration with Main System**
+
+```bash
+# The Q&A cache is automatically used by the main system
+python run.py
+
+# Commands within the main system:
+"What are moon phases?"           # May hit Q&A cache
+"cache clear"                     # Clears all caches including Q&A
+"qa cache clear"                  # Clears only Q&A cache
+"stats"                          # Shows Q&A cache statistics
+```
+
+### Performance Optimization Tips
+
+#### **Document Manager**
+- **Contextualization**: Enabled by default for better retrieval, use `--no-contextualize` for speed
+- **Parallel Workers**: Auto-configured based on CPU cores, adjust with `--workers` for I/O optimization
+- **Batch Size**: Default 100 chunks per batch, increase for faster processing of large documents
+- **Document Types**: Use `--doc-type qa` for Q&A documents to enable specialized chunking
+
+#### **Q&A Cache**
+- **Similarity Threshold**: Default 0.75, adjust in constructor for stricter/looser matching
+- **Batch Operations**: Use `_add_documents_batch()` for bulk imports (50 pairs per batch recommended)
+- **Domain Filtering**: Provide `active_domains` parameter for targeted searches
+- **Health Monitoring**: Monitor hit rate and response time for cache effectiveness
+
+#### **Best Practices**
+1. **Document Organization**: Keep Q&A documents in `data/qa/` and narrative documents in `docs/`
+2. **Domain Consistency**: Use consistent domain names across all documents
+3. **Regular Validation**: Run `python document_manager.py validate` periodically
+4. **Cache Monitoring**: Check Q&A cache hit rates and clear if performance degrades
+5. **Batch Processing**: Use batch operations for multiple documents to leverage parallel processing
+
+### 📋 Quick Reference
+
+#### **Most Common Commands**
+
+```bash
+# Document Management
+python document_manager.py add docs/new_file.md --domain crystals
+python document_manager.py list
+python document_manager.py info docs/crystals.md
+
+# Q&A Cache Status
+python -c "import sys; sys.path.insert(0, 'src'); from cache.qa_cache import QACache; qa = QACache(); print(f'Q&A Cache: {qa.get_stats()[\"total_qa_pairs\"]} pairs')"
+
+# System Status
+python run.py
+# Then type: stats, domains, cache clear
+```
+
+#### **Troubleshooting Commands**
+
+```bash
+# Fix document issues
+python document_manager.py validate
+python document_manager.py fix
+
+# Clear caches if performance degrades
+python -c "import sys; sys.path.insert(0, 'src'); from cache.qa_cache import QACache; QACache().clear_cache()"
+
+# Check system health
+python -c "import sys; sys.path.insert(0, 'src'); from core.contextual_rag import OptimizedContextualRAGSystem; rag = OptimizedContextualRAGSystem(); print(rag.get_stats())"
+```
+
+#### **Available Domains**
+- `lunar` - Moon phases, cosmic timing, lunar influences
+- `ifs` - Internal Family Systems therapy, parts work
+- `crystals` - Crystal properties, energy work, formations  
+- `astrology` - Planetary influences, astrological concepts
+- `tarot` - Tarot symbolism, card meanings, spreads
+- `numerology` - Number meanings, calculations, interpretations
+- `archetypes` - Jungian archetypes, shadow work, psychological patterns
+
 ## 🔧 System Architecture
 
 ### Multi-Agent Flow

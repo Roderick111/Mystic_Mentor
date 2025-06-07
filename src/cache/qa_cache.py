@@ -1,373 +1,472 @@
 #!/usr/bin/env python3
 """
-Q&A Cache System for RAG
+Q&A Cache for Esoteric Vectors
 
-Implements specialized caching for Q&A documents where questions are embedded
-separately from answers for optimal semantic matching.
+Clean Q&A caching system with:
+- Semantic similarity search
+- Domain-aware filtering
+- Resilience integration
+- Clean logging
 """
 
 import os
-import json
 import time
-import re
-from typing import Dict, List, Optional, Tuple, Any
-from pathlib import Path
-import numpy as np
+import chromadb
+from typing import Dict, Any, List, Optional
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 
-try:
-    from langchain_openai import OpenAIEmbeddings
-    from langchain_community.vectorstores import Chroma
-    from langchain_core.documents import Document
-except ImportError:
-    print("⚠️ Missing dependencies for Q&A cache")
-    OpenAIEmbeddings = None
-    Chroma = None
-    Document = None
+from core.resilience_manager import resilience_manager
+from utils.logger import logger
 
 
 class QACache:
     """
-    Specialized cache for Q&A documents with question-based retrieval.
+    Clean Q&A cache system for fast response retrieval.
     
-    This system:
-    1. Parses Q&A documents to extract question-answer pairs
-    2. Creates embeddings for questions only
-    3. Stores full answers as retrievable content
-    4. Maintains domain filtering and metadata
+    Features:
+    - Semantic similarity search for Q&A pairs
+    - Domain-aware filtering
+    - Circuit breaker protection
+    - Performance tracking
+    - Clean logging
     """
     
     def __init__(self, 
-                 cache_dir: str = "data/chroma_db/qa_cache",
+                 chroma_path: str = "data/chroma_db/qa_cache",
                  collection_name: str = "qa_cache_collection",
-                 similarity_threshold: float = 0.85):
-        """Initialize Q&A cache system."""
-        self.cache_dir = cache_dir
+                 similarity_threshold: float = 0.75):
+        """Initialize Q&A cache."""
+        self.chroma_path = chroma_path
         self.collection_name = collection_name
         self.similarity_threshold = similarity_threshold
         
-        # Create cache directory
-        os.makedirs(cache_dir, exist_ok=True)
+        # Performance tracking
+        self.stats = {
+            'total_queries': 0,
+            'cache_hits': 0,
+            'total_response_time': 0.0
+        }
         
-        # Initialize embeddings
+        # Initialize components
+        self.embeddings = None
+        self.chroma_client = None
+        self.vectorstore = None
+        
+        # Setup system
+        self._setup_embeddings()
+        self._setup_chroma_client()
+        self._setup_vectorstore()
+        
+        # Log initialization
+        if self.vectorstore:
+            count = self._get_qa_count()
+            logger.system_ready(f"Q&A Cache: {count} question-answer pairs loaded")
+        else:
+            logger.warning("Q&A Cache: Failed to initialize")
+    
+    def _setup_embeddings(self):
+        """Initialize OpenAI embeddings with resilience."""
         try:
             self.embeddings = OpenAIEmbeddings(
                 model="text-embedding-3-small",
-                show_progress_bar=False
+                show_progress_bar=False,
+                max_retries=3,
+                timeout=30.0
             )
-        except Exception as e:
-            print(f"❌ Failed to initialize Q&A embeddings: {e}")
-            self.embeddings = None
             
-        # Initialize vector store
-        self.vectorstore = None
-        self._setup_vectorstore()
-        
-        # Stats tracking
-        self.stats = {
-            'total_qa_pairs': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
-            'total_queries': 0,
-            'avg_response_time': 0.0,
-            'domains_loaded': set()
-        }
+            # Register with resilience manager
+            resilience_manager.register_openai_health_check(self.embeddings)
+            
+            logger.debug_openai("Q&A Cache: OpenAI embeddings initialized")
+            
+        except Exception as e:
+            logger.error(f"Q&A Cache: Failed to initialize embeddings: {e}")
+            self.embeddings = None
+    
+    def _setup_chroma_client(self):
+        """Initialize ChromaDB client with resilience."""
+        try:
+            self.chroma_client = chromadb.PersistentClient(path=self.chroma_path)
+            
+            # Register with resilience manager
+            resilience_manager.register_chromadb_health_check(self.chroma_client)
+            
+            logger.debug_chromadb("Q&A Cache: ChromaDB client initialized")
+            
+        except Exception as e:
+            logger.error(f"Q&A Cache: Failed to initialize ChromaDB: {e}")
+            self.chroma_client = None
     
     def _setup_vectorstore(self):
-        """Initialize or load the Q&A vectorstore."""
-        if self.embeddings is None:
-            print("⚠️ Cannot initialize Q&A vectorstore without embeddings")
+        """Initialize vectorstore for Q&A cache."""
+        if not self.embeddings or not self.chroma_client:
+            logger.warning("Q&A Cache: Cannot initialize vectorstore - missing dependencies")
             return
             
-        if os.path.exists(self.cache_dir):
-            try:
-                self.vectorstore = Chroma(
-                    persist_directory=self.cache_dir,
-                    embedding_function=self.embeddings,
-                    collection_name=self.collection_name
-                )
-                count = self.vectorstore._collection.count()
-                print(f"📚 Q&A Cache: {count} question-answer pairs loaded")
-            except Exception as e:
-                print(f"⚠️ Error loading Q&A cache: {e}")
-                self.vectorstore = None
-        else:
-            print("📚 Q&A Cache: Creating new cache")
-    
-    def parse_qa_document(self, content: str, source_path: str, domain: str) -> List[Dict[str, Any]]:
-        """
-        Parse Q&A document to extract question-answer pairs.
-        
-        Args:
-            content: Raw document content
-            source_path: Path to source file
-            domain: Domain classification
-            
-        Returns:
-            List of question-answer pair dictionaries
-        """
-        qa_pairs = []
-        
-        # Split by major question headers (## followed by number)
-        sections = re.split(r'\n## \d+\.', content)
-        
-        for i, section in enumerate(sections):
-            if not section.strip():
-                continue
-                
-            # Extract question from the first line after split
-            lines = section.strip().split('\n')
-            if not lines:
-                continue
-                
-            # Find the question (usually the first substantial line)
-            question = None
-            answer_start_idx = 1
-            
-            for idx, line in enumerate(lines):
-                if line.strip() and not line.startswith('#'):
-                    question = line.strip()
-                    answer_start_idx = idx + 1
-                    break
-            
-            if not question:
-                continue
-                
-            # Clean up question
-            question = re.sub(r'^[\d\.\s]+', '', question).strip()  # Remove numbering
-            question = question.rstrip('?') + '?'  # Ensure ends with ?
-            
-            # Extract answer (everything after the question)
-            answer_lines = lines[answer_start_idx:]
-            answer = '\n'.join(answer_lines).strip()
-            
-            # Remove separators and clean up
-            answer = re.sub(r'\n---+\n', '\n\n', answer)
-            answer = answer.strip()
-            
-            if question and answer and len(answer) > 50:  # Minimum answer length
-                qa_pairs.append({
-                    'question': question,
-                    'answer': answer,
-                    'domain': domain,
-                    'source': source_path,
-                    'qa_id': f"{domain}_qa_{i}",
-                    'question_length': len(question),
-                    'answer_length': len(answer)
-                })
-        
-        return qa_pairs
-    
-    def add_qa_document(self, file_path: str, domain: str) -> bool:
-        """
-        Add Q&A document to cache with question-based embedding.
-        
-        Args:
-            file_path: Path to Q&A document
-            domain: Domain classification
-            
-        Returns:
-            bool: Success status
-        """
         try:
-            if not os.path.exists(file_path):
-                print(f"❌ Q&A file not found: {file_path}")
-                return False
-                
-            # Read document content
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
+            # Check if collection exists
+            existing_collections = [col.name for col in self.chroma_client.list_collections()]
             
-            # Parse Q&A pairs
-            qa_pairs = self.parse_qa_document(content, file_path, domain)
+            if self.collection_name not in existing_collections:
+                # Create new collection
+                self._create_qa_collection()
             
-            if not qa_pairs:
-                print(f"⚠️ No Q&A pairs found in {file_path}")
-                return False
+            # Wrap with LangChain
+            self.vectorstore = Chroma(
+                client=self.chroma_client,
+                collection_name=self.collection_name,
+                embedding_function=self.embeddings
+            )
             
-            # Create documents for questions only (for embedding)
-            question_docs = []
-            for qa_pair in qa_pairs:
-                # Create document with question as content for embedding
-                doc = Document(
-                    page_content=qa_pair['question'],
-                    metadata={
-                        'qa_id': qa_pair['qa_id'],
-                        'domain': qa_pair['domain'],
-                        'source': qa_pair['source'],
-                        'doc_type': 'qa',
-                        'question': qa_pair['question'],
-                        'answer': qa_pair['answer'],  # Store full answer in metadata
-                        'question_length': qa_pair['question_length'],
-                        'answer_length': qa_pair['answer_length']
-                    }
-                )
-                question_docs.append(doc)
-            
-            # Add to vectorstore
-            if self.vectorstore is None:
-                # Create new vectorstore
-                self.vectorstore = Chroma.from_documents(
-                    documents=question_docs,
-                    embedding=self.embeddings,
-                    persist_directory=self.cache_dir,
-                    collection_name=self.collection_name
-                )
-            else:
-                # Add to existing vectorstore
-                self.vectorstore.add_documents(question_docs)
-            
-            # Update stats
-            self.stats['total_qa_pairs'] += len(qa_pairs)
-            self.stats['domains_loaded'].add(domain)
-            
-            print(f"✅ Added {len(qa_pairs)} Q&A pairs from {file_path} ({domain})")
-            return True
+            logger.debug_chromadb("Q&A Cache: Vectorstore initialized")
             
         except Exception as e:
-            print(f"❌ Error adding Q&A document {file_path}: {e}")
-            return False
+            logger.error(f"Q&A Cache: Failed to setup vectorstore: {e}")
+            self.vectorstore = None
     
-    def search_qa(self, query: str, active_domains: List[str], k: int = 3) -> Optional[Dict[str, Any]]:
+    def _create_qa_collection(self):
+        """Create new Q&A collection with metadata."""
+        from datetime import datetime
+        
+        collection_metadata = {
+            "version": "1.2.0",
+            "created": datetime.now().isoformat(),
+            "embedding_model": "text-embedding-3-small",
+            "description": "Q&A cache for esoteric knowledge with question-only embeddings",
+            "type": "qa_cache",
+            "strategy": "question_embedding_answer_retrieval",
+            "domains": "lunar,ifs,astrology,crystals,numerology,tarot",
+            "hnsw_config": "qa_optimized",
+            "last_updated": datetime.now().isoformat(),
+            "system": "esoteric_vectors",
+            "similarity_threshold": str(self.similarity_threshold)
+        }
+        
+        collection = self.chroma_client.create_collection(
+            name=self.collection_name,
+            metadata=collection_metadata
+        )
+        
+        logger.debug_chromadb(f"Q&A Cache: Created new collection v{collection_metadata['version']}")
+        return collection
+    
+    def _get_qa_count(self) -> int:
+        """Get total number of Q&A pairs."""
+        try:
+            if self.vectorstore and hasattr(self.vectorstore, '_collection'):
+                return self.vectorstore._collection.count()
+            return 0
+        except Exception:
+            return 0
+    
+    def search_qa(self, query: str, active_domains: List[str] = None, k: int = 3) -> Optional[Dict[str, Any]]:
         """
-        Search for Q&A answers based on question similarity.
+        Search for similar Q&A pairs with domain filtering.
         
         Args:
             query: User's question
-            active_domains: List of active domains to filter by
-            k: Number of similar questions to retrieve
+            active_domains: List of active domains for filtering
+            k: Number of results to retrieve
             
         Returns:
-            Dict with answer and metadata if found, None otherwise
+            Best matching Q&A pair if similarity above threshold, None otherwise
         """
         start_time = time.time()
         self.stats['total_queries'] += 1
         
         try:
-            if self.vectorstore is None:
-                self.stats['cache_misses'] += 1
+            if not self.vectorstore:
+                logger.debug("Q&A Cache: Vectorstore not available")
                 return None
             
-            # Create domain filter
-            domain_filter = {"domain": {"$in": active_domains}} if active_domains else {}
+            # Create domain filter if domains specified
+            domain_filter = None
+            if active_domains:
+                domain_filter = {"domain": {"$in": active_domains}}
+                logger.debug_optimization(f"Q&A Cache: Applying domain filter: {domain_filter}")
             
             # Search for similar questions
             if domain_filter:
-                docs = self.vectorstore.similarity_search_with_score(
-                    query, 
-                    k=k,
-                    filter=domain_filter
-                )
+                docs = self.vectorstore.similarity_search_with_score(query, k=k, filter=domain_filter)
             else:
                 docs = self.vectorstore.similarity_search_with_score(query, k=k)
             
             if not docs:
-                self.stats['cache_misses'] += 1
+                logger.debug("Q&A Cache: No similar questions found")
                 return None
             
-            # Check if best match exceeds similarity threshold
-            best_doc, best_score = docs[0]
-            similarity = 1 - best_score  # Convert distance to similarity
+            # Get best match
+            best_doc, similarity_score = docs[0]
             
-            if similarity >= self.similarity_threshold:
-                # Cache hit!
-                self.stats['cache_hits'] += 1
-                response_time = time.time() - start_time
-                
-                # Update average response time
-                self._update_avg_response_time(response_time)
-                
-                return {
-                    'answer': best_doc.metadata['answer'],
-                    'question': best_doc.metadata['question'],
-                    'domain': best_doc.metadata['domain'],
-                    'source': best_doc.metadata['source'],
-                    'similarity': similarity,
-                    'qa_id': best_doc.metadata['qa_id'],
-                    'response_time': response_time,
-                    'cache_type': 'qa_hit'
-                }
-            else:
-                self.stats['cache_misses'] += 1
+            # Convert distance to similarity (ChromaDB returns distance, we want similarity)
+            similarity = 1 - similarity_score
+            
+            # Check if similarity meets threshold
+            if similarity < self.similarity_threshold:
+                logger.debug(f"Q&A Cache: Best similarity {similarity:.3f} below threshold {self.similarity_threshold}")
                 return None
-                
+            
+            # Record cache hit
+            self.stats['cache_hits'] += 1
+            response_time = time.time() - start_time
+            self.stats['total_response_time'] += response_time
+            
+            # Extract Q&A data from metadata
+            metadata = best_doc.metadata
+            result = {
+                'question': metadata.get('question', ''),
+                'answer': best_doc.page_content,
+                'domain': metadata.get('domain', 'unknown'),
+                'source': metadata.get('source', 'unknown'),
+                'similarity': similarity,
+                'qa_id': metadata.get('qa_id', 'unknown'),
+                'response_time': response_time
+            }
+            
+            logger.debug_optimization(f"Q&A Cache: Hit with similarity {similarity:.3f}")
+            return result
+            
         except Exception as e:
-            print(f"❌ Q&A search error: {e}")
-            self.stats['cache_misses'] += 1
+            logger.error(f"Q&A Cache search error: {e}")
             return None
     
-    def _update_avg_response_time(self, response_time: float):
-        """Update average response time calculation."""
-        total = self.stats['total_queries']
-        if total > 1:
-            self.stats['avg_response_time'] = (
-                (self.stats['avg_response_time'] * (total - 1) + response_time) / total
+    def add_qa_pair(self, question: str, answer: str, domain: str, source: str = "manual", qa_id: str = None) -> bool:
+        """Add a new Q&A pair to the cache."""
+        try:
+            if not self.vectorstore:
+                logger.error("Q&A Cache: Cannot add pair - vectorstore not available")
+                return False
+            
+            from datetime import datetime
+            import uuid
+            
+            # Generate ID if not provided
+            if not qa_id:
+                qa_id = str(uuid.uuid4())
+            
+            # Create document
+            metadata = {
+                'question': question,
+                'domain': domain,
+                'source': source,
+                'qa_id': qa_id,
+                'created': datetime.now().isoformat()
+            }
+            
+            # Add to vectorstore (answer is the content, question is in metadata)
+            self.vectorstore.add_texts(
+                texts=[answer],
+                metadatas=[metadata],
+                ids=[qa_id]
             )
-        else:
-            self.stats['avg_response_time'] = response_time
+            
+            logger.debug(f"Q&A Cache: Added pair for domain '{domain}'")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Q&A Cache: Failed to add pair: {e}")
+            return False
+    
+    def _add_documents_batch(self, qa_pairs: List[Dict[str, str]], batch_size: int = 50) -> bool:
+        """
+        Add multiple Q&A pairs in batches for optimal performance.
+        
+        Args:
+            qa_pairs: List of dicts with keys: question, answer, domain, source, qa_id (optional)
+            batch_size: Number of pairs to add per batch
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            if not self.vectorstore:
+                logger.error("Q&A Cache: Cannot add batch - vectorstore not available")
+                return False
+            
+            from datetime import datetime
+            import uuid
+            
+            total_pairs = len(qa_pairs)
+            logger.debug(f"Q&A Cache: Adding {total_pairs} pairs in batches of {batch_size}")
+            
+            for i in range(0, total_pairs, batch_size):
+                batch = qa_pairs[i:i + batch_size]
+                
+                # Prepare batch data
+                texts = []
+                metadatas = []
+                ids = []
+                
+                for pair in batch:
+                    # Generate ID if not provided
+                    qa_id = pair.get('qa_id') or str(uuid.uuid4())
+                    
+                    metadata = {
+                        'question': pair['question'],
+                        'domain': pair['domain'],
+                        'source': pair.get('source', 'batch'),
+                        'qa_id': qa_id,
+                        'created': datetime.now().isoformat()
+                    }
+                    
+                    texts.append(pair['answer'])
+                    metadatas.append(metadata)
+                    ids.append(qa_id)
+                
+                # Add batch to vectorstore
+                self.vectorstore.add_texts(
+                    texts=texts,
+                    metadatas=metadatas,
+                    ids=ids
+                )
+                
+                logger.debug(f"Q&A Cache: Added batch {i//batch_size + 1}/{(total_pairs + batch_size - 1)//batch_size}")
+            
+            logger.command_executed(f"Q&A Cache: Added {total_pairs} pairs successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Q&A Cache: Error in batch addition: {e}")
+            return False
     
     def get_stats(self) -> Dict[str, Any]:
         """Get Q&A cache statistics."""
-        total_queries = self.stats['total_queries']
-        hit_rate = (self.stats['cache_hits'] / total_queries * 100) if total_queries > 0 else 0
-        
-        # Get actual count from vectorstore if available
-        actual_qa_pairs = 0
-        if self.vectorstore:
-            try:
-                actual_qa_pairs = self.vectorstore._collection.count()
-            except:
-                actual_qa_pairs = self.stats['total_qa_pairs']
+        total_qa_pairs = self._get_qa_count()
+        hit_rate = (self.stats['cache_hits'] / self.stats['total_queries'] * 100) if self.stats['total_queries'] > 0 else 0
+        avg_response_time = (self.stats['total_response_time'] / self.stats['total_queries']) if self.stats['total_queries'] > 0 else 0
         
         return {
-            'total_qa_pairs': actual_qa_pairs or self.stats['total_qa_pairs'],
-            'total_queries': total_queries,
+            'total_qa_pairs': total_qa_pairs,
+            'total_queries': self.stats['total_queries'],
             'cache_hits': self.stats['cache_hits'],
-            'cache_misses': self.stats['cache_misses'],
             'hit_rate': hit_rate,
-            'avg_response_time': self.stats['avg_response_time'],
-            'domains_loaded': list(self.stats['domains_loaded']),
+            'avg_response_time': avg_response_time,
             'similarity_threshold': self.similarity_threshold
         }
     
     def clear_cache(self):
         """Clear the Q&A cache."""
         try:
-            if self.vectorstore:
-                # Clear the collection by deleting all documents
+            if self.chroma_client and self.collection_name:
+                # Delete and recreate collection
                 try:
-                    # Get all document IDs and delete them
-                    collection = self.vectorstore._collection
-                    all_docs = collection.get()
-                    if all_docs['ids']:
-                        collection.delete(ids=all_docs['ids'])
-                        print("✅ Cleared existing Q&A documents")
-                except Exception as delete_error:
-                    print(f"⚠️ Collection delete issue (continuing): {delete_error}")
+                    self.chroma_client.delete_collection(name=self.collection_name)
+                except Exception:
+                    pass  # Collection might not exist
                 
-            # Reset stats
-            self.stats = {
-                'total_qa_pairs': 0,
-                'cache_hits': 0,
-                'cache_misses': 0,
-                'total_queries': 0,
-                'avg_response_time': 0.0,
-                'domains_loaded': set()
-            }
+                self._create_qa_collection()
+                
+                # Reinitialize vectorstore
+                self._setup_vectorstore()
+                
+                # Reset stats
+                self.stats = {
+                    'total_queries': 0,
+                    'cache_hits': 0,
+                    'total_response_time': 0.0
+                }
+                
+                logger.command_executed("Q&A cache cleared")
+                return True
+            else:
+                logger.error("Q&A Cache: Cannot clear - client not available")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Q&A Cache: Failed to clear: {e}")
+            return False
+    
+    def get_domain_stats(self) -> Dict[str, int]:
+        """Get Q&A pairs count by domain."""
+        try:
+            if not self.vectorstore or not hasattr(self.vectorstore, '_collection'):
+                return {}
             
-            # Reinitialize
-            self._setup_vectorstore()
-            print("✅ Q&A cache cleared")
+            # Get all documents with metadata
+            collection = self.vectorstore._collection
+            results = collection.get(include=["metadatas"])
+            
+            domain_counts = {}
+            if results and results.get('metadatas'):
+                for metadata in results['metadatas']:
+                    domain = metadata.get('domain', 'unknown')
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
+            
+            return domain_counts
+            
+        except Exception as e:
+            logger.debug(f"Q&A Cache: Failed to get domain stats: {e}")
+            return {}
+    
+    def update_collection_metadata(self, updates: Dict[str, Any]) -> bool:
+        """Update collection metadata with automatic timestamp."""
+        try:
+            if not self.chroma_client:
+                logger.error("Q&A Cache: Cannot update metadata - client not available")
+                return False
+            
+            from datetime import datetime
+            
+            # Get current collection
+            collection = self.chroma_client.get_collection(name=self.collection_name)
+            current_metadata = collection.metadata or {}
+            
+            # Add timestamp and merge updates
+            updates['last_updated'] = datetime.now().isoformat()
+            current_metadata.update(updates)
+            
+            # Update collection metadata
+            collection.modify(metadata=current_metadata)
+            
+            logger.debug_chromadb(f"Q&A Cache: Updated collection metadata")
             return True
             
         except Exception as e:
-            print(f"❌ Error clearing Q&A cache: {e}")
+            logger.error(f"Q&A Cache: Failed to update metadata: {e}")
             return False
     
-    def reload_cache(self):
-        """Reload the Q&A cache from disk."""
-        self._setup_vectorstore()
-        print("✅ Q&A cache reloaded")
+    def get_collection_info(self) -> Dict[str, Any]:
+        """Get comprehensive collection information with health metrics."""
+        try:
+            if not self.vectorstore or not hasattr(self.vectorstore, '_collection'):
+                return {'error': 'Collection not available'}
+            
+            collection = self.vectorstore._collection
+            
+            # Basic collection info
+            info = {
+                'name': collection.name,
+                'count': collection.count(),
+                'metadata': getattr(collection, 'metadata', {}),
+                'type': 'qa_cache'
+            }
+            
+            # Add health metrics
+            stats = self.get_stats()
+            health_status = 'excellent' if stats['hit_rate'] > 70 else 'good' if stats['hit_rate'] > 40 else 'poor'
+            response_status = 'fast' if stats['avg_response_time'] < 0.1 else 'acceptable' if stats['avg_response_time'] < 0.5 else 'slow'
+            
+            info['health'] = {
+                'hit_rate_status': health_status,
+                'response_time_status': response_status,
+                'total_queries': stats['total_queries'],
+                'cache_hits': stats['cache_hits'],
+                'hit_rate_percent': stats['hit_rate'],
+                'avg_response_time_ms': stats['avg_response_time'] * 1000,
+                'similarity_threshold': self.similarity_threshold
+            }
+            
+            # Add domain distribution
+            info['domain_distribution'] = self.get_domain_stats()
+            
+            return info
+            
+        except Exception as e:
+            logger.error(f"Q&A Cache: Failed to get collection info: {e}")
+            return {'error': str(e)}
     
     def __str__(self) -> str:
         """String representation."""
-        return f"QACache(pairs={self.stats['total_qa_pairs']}, domains={len(self.stats['domains_loaded'])})" 
+        count = self._get_qa_count()
+        return f"QACache({count} pairs, threshold={self.similarity_threshold})" 

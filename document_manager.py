@@ -25,7 +25,7 @@ current_dir = Path(__file__).parent
 src_dir = current_dir / "src"
 sys.path.insert(0, str(src_dir))
 
-# Always keep src. otherwise it will not work
+# Import from relative path for consistency with cleaned architecture
 from src.core.contextual_rag import OptimizedContextualRAGSystem
 
 @dataclass
@@ -120,20 +120,24 @@ class SimpleDocumentManager:
     def _init_rag_system(self):
         """Initialize RAG system if not already done"""
         if self.rag_system is None:
-            self.rag_system = OptimizedContextualRAGSystem(enable_precomputed=False)
+            self.rag_system = OptimizedContextualRAGSystem()
     
     def _add_documents_to_vectorstore(self, documents: List[Document]) -> bool:
-        """Add processed documents to vector database"""
+        """Add processed documents to vector database using optimized batch operations"""
         try:
             self._init_rag_system()
             
-            # Add documents in batches to avoid memory issues
-            batch_size = self.config.chunk_batch_size
-            for i in range(0, len(documents), batch_size):
-                batch = documents[i:i + batch_size]
-                self.rag_system.vectorstore.add_documents(batch)
+            # Use the new batch operation method
+            if hasattr(self.rag_system, 'add_documents_batch'):
+                return self.rag_system.add_documents_batch(documents, self.config.chunk_batch_size)
+            else:
+                # Fallback to original method
+                batch_size = self.config.chunk_batch_size
+                for i in range(0, len(documents), batch_size):
+                    batch = documents[i:i + batch_size]
+                    self.rag_system.vectorstore.add_documents(batch)
+                return True
                 
-            return True
         except Exception as e:
             print(f"❌ Error adding documents to vectorstore: {e}")
             return False

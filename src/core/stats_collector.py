@@ -1,236 +1,231 @@
 #!/usr/bin/env python3
 """
-Statistics Collector for RAG System
+Stats Collector for Esoteric Vectors
 
-Handles collection and reporting of system statistics including:
-- Query performance metrics
-- Cache statistics  
-- Vectorstore information
-- Domain configuration
+Clean statistics collection with:
+- Query performance tracking
+- Vectorstore health monitoring
+- Resilience metrics integration
+- Clean logging
 """
 
-import os
 import time
 from typing import Dict, Any, Optional
-from pathlib import Path
+from collections import defaultdict, deque
+from datetime import datetime
+
+from utils.logger import logger
 
 
 class StatsCollector:
     """
-    Collects and manages statistics for the RAG system.
+    Clean statistics collector for system performance monitoring.
     
     Tracks:
-    - Query performance (response times, hit rates)
-    - Cache statistics (embedding cache, query cache, precomputed)
-    - Vectorstore information
-    - Domain configuration
+    - Query performance and response times
+    - Vectorstore health and document counts
+    - System resilience metrics
+    - Cache hit rates and efficiency
     """
     
-    def __init__(self):
-        """Initialize statistics collector with default values."""
-        self.query_stats = {
-            'total_queries': 0,
-            'precomputed_hits': 0,
-            'cache_hits': 0,
-            'rag_processing': 0,
-            'domain_blocked': 0,
+    def __init__(self, max_recent_queries: int = 100):
+        """Initialize stats collector."""
+        self.max_recent_queries = max_recent_queries
+        
+        # Query performance tracking
+        self.query_stats = defaultdict(lambda: {
+            'count': 0,
             'total_time': 0.0,
-            'avg_response_time': 0.0
-        }
+            'recent_times': deque(maxlen=max_recent_queries)
+        })
+        
+        # System start time
+        self.start_time = datetime.now()
+        
+        logger.debug("Stats collector initialized")
     
     def record_query(self, query_type: str, response_time: float):
-        """
-        Record a query execution.
+        """Record a query execution."""
+        stats = self.query_stats[query_type]
+        stats['count'] += 1
+        stats['total_time'] += response_time
+        stats['recent_times'].append(response_time)
         
-        Args:
-            query_type: Type of query ('precomputed', 'cache', 'rag', 'domain_blocked')
-            response_time: Time taken to process the query in seconds
-        """
-        self.query_stats['total_queries'] += 1
-        self.query_stats['total_time'] += response_time
-        
-        if query_type == 'precomputed':
-            self.query_stats['precomputed_hits'] += 1
-        elif query_type == 'cache':
-            self.query_stats['cache_hits'] += 1
-        elif query_type == 'rag':
-            self.query_stats['rag_processing'] += 1
-        elif query_type == 'domain_blocked':
-            self.query_stats['domain_blocked'] += 1
-        
-        self._update_avg_response_time()
-    
-    def _update_avg_response_time(self):
-        """Update average response time calculation."""
-        total_queries = self.query_stats['total_queries']
-        if total_queries > 0:
-            self.query_stats['avg_response_time'] = self.query_stats['total_time'] / total_queries
+        logger.debug(f"Recorded {query_type} query: {response_time:.3f}s")
     
     def get_query_stats(self) -> Dict[str, Any]:
-        """Get query performance statistics."""
-        return self.query_stats.copy()
+        """Get comprehensive query performance statistics."""
+        if not self.query_stats:
+            return {
+                'total_queries': 0,
+                'avg_response_time': 0.0,
+                'by_type': {}
+            }
+        
+        total_queries = sum(stats['count'] for stats in self.query_stats.values())
+        total_time = sum(stats['total_time'] for stats in self.query_stats.values())
+        avg_response_time = total_time / total_queries if total_queries > 0 else 0.0
+        
+        by_type = {}
+        for query_type, stats in self.query_stats.items():
+            avg_time = stats['total_time'] / stats['count'] if stats['count'] > 0 else 0.0
+            recent_avg = sum(stats['recent_times']) / len(stats['recent_times']) if stats['recent_times'] else 0.0
+            
+            by_type[query_type] = {
+                'count': stats['count'],
+                'avg_response_time': avg_time,
+                'recent_avg_response_time': recent_avg,
+                'total_time': stats['total_time']
+            }
+        
+        return {
+            'total_queries': total_queries,
+            'avg_response_time': avg_response_time,
+            'total_time': total_time,
+            'by_type': by_type
+        }
     
     def get_vectorstore_stats(self, vectorstore) -> Dict[str, Any]:
-        """
-        Get vectorstore statistics.
-        
-        Args:
-            vectorstore: ChromaDB vectorstore instance
-            
-        Returns:
-            dict: Vectorstore statistics
-        """
-        stats = {
-            'vectorstore_docs': 0,
-            'total_chunks': 0
-        }
-        
-        if vectorstore:
-            try:
-                doc_count = vectorstore._collection.count()
-                stats['vectorstore_docs'] = doc_count
-                stats['total_chunks'] = doc_count
-            except Exception as e:
-                stats['vectorstore_error'] = str(e)
-        
-        return stats
-    
-    def get_precomputed_stats(self, lunar_cache) -> Dict[str, Any]:
-        """
-        Get pre-computed response statistics.
-        
-        Args:
-            lunar_cache: Pre-computed response cache instance (or None if disabled)
-            
-        Returns:
-            dict: Pre-computed response statistics
-        """
-        if lunar_cache is None:
-            return {'status': 'disabled', 'message': 'Using unified vector database approach'}
+        """Get vectorstore statistics."""
+        stats = {}
         
         try:
-            return lunar_cache.get_stats()
-        except Exception as e:
-            return {'precomputed_error': str(e)}
-    
-    def get_query_cache_stats(self, query_cache, enabled: bool) -> Dict[str, Any]:
-        """
-        Get query similarity cache statistics.
-        
-        Args:
-            query_cache: Query cache instance
-            enabled: Whether query cache is enabled
-            
-        Returns:
-            dict: Query cache statistics
-        """
-        if not enabled or not query_cache:
-            return {'enabled': False}
-        
-        try:
-            stats = query_cache.get_cache_summary(return_dict=True)
-            stats['enabled'] = True
-            return stats
-        except Exception as e:
-            return {'enabled': False, 'error': str(e)}
-    
-    def get_embedding_cache_stats(self, persist_directory: str) -> Dict[str, Any]:
-        """
-        Get embedding cache statistics.
-        
-        Args:
-            persist_directory: Directory where embeddings are cached
-            
-        Returns:
-            dict: Embedding cache statistics
-        """
-        try:
-            embedding_cache_dir = os.path.join(persist_directory, "embedding_cache")
-            if os.path.exists(embedding_cache_dir):
-                cache_files = list(Path(embedding_cache_dir).glob("*"))
-                cache_size = sum(f.stat().st_size for f in cache_files) / (1024 * 1024)  # MB
-                return {
-                    'cached_embeddings': len(cache_files),
-                    'cache_size_mb': round(cache_size, 2),
-                    'status': 'active'
-                }
+            if vectorstore and hasattr(vectorstore, '_collection'):
+                collection = vectorstore._collection
+                if collection:
+                    stats['vectorstore_docs'] = collection.count()
+                    stats['collection_name'] = collection.name
+                    
+                    # Collection metadata
+                    metadata = getattr(collection, 'metadata', {})
+                    if metadata:
+                        stats['collection_metadata'] = {
+                            'version': metadata.get('version', 'unknown'),
+                            'created': metadata.get('created', 'unknown'),
+                            'embedding_model': metadata.get('embedding_model', 'unknown'),
+                            'last_updated': metadata.get('last_updated', 'unknown')
+                        }
+                    
+                    # Health metrics
+                    health_metrics = self._get_collection_health(collection)
+                    stats['collection_health'] = health_metrics
+                else:
+                    stats['vectorstore_docs'] = 0
+                    stats['error'] = 'Collection not available'
             else:
-                return {'status': 'not_found'}
+                stats['vectorstore_docs'] = 0
+                stats['error'] = 'Vectorstore not available'
+                
         except Exception as e:
-            return {'status': 'error', 'error': str(e)}
-    
-    def get_comprehensive_stats(self, 
-                              domain_manager,
-                              vectorstore,
-                              lunar_cache,
-                              query_cache,
-                              query_cache_enabled: bool,
-                              persist_directory: str) -> Dict[str, Any]:
-        """
-        Get comprehensive system statistics.
-        
-        Args:
-            domain_manager: Domain manager instance
-            vectorstore: ChromaDB vectorstore instance
-            lunar_cache: Pre-computed response cache
-            query_cache: Query similarity cache
-            query_cache_enabled: Whether query cache is enabled
-            persist_directory: Directory for cache storage
-            
-        Returns:
-            dict: Comprehensive system statistics
-        """
-        stats = {
-            'domain_config': domain_manager.get_status(),
-            'query_performance': self.get_query_stats(),
-        }
-        
-        # Add vectorstore stats
-        stats.update(self.get_vectorstore_stats(vectorstore))
-        
-        # Add cache statistics
-        stats['precomputed_responses'] = self.get_precomputed_stats(lunar_cache)
-        stats['query_cache'] = self.get_query_cache_stats(query_cache, query_cache_enabled)
-        stats['embedding_cache'] = self.get_embedding_cache_stats(persist_directory)
+            logger.debug(f"Error getting vectorstore stats: {e}")
+            stats['vectorstore_docs'] = 0
+            stats['error'] = str(e)
         
         return stats
+    
+    def _get_collection_health(self, collection) -> Dict[str, Any]:
+        """Get collection health metrics."""
+        try:
+            # Basic health check
+            doc_count = collection.count()
+            
+            health = {
+                'status': 'healthy' if doc_count > 0 else 'empty',
+                'document_count': doc_count,
+                'last_checked': datetime.now().isoformat()
+            }
+            
+            # Check if collection has metadata
+            metadata = getattr(collection, 'metadata', {})
+            if metadata:
+                health['has_metadata'] = True
+                health['version'] = metadata.get('version', 'unknown')
+            else:
+                health['has_metadata'] = False
+            
+            return health
+            
+        except Exception as e:
+            logger.debug(f"Collection health check failed: {e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'last_checked': datetime.now().isoformat()
+            }
+    
+    def get_system_uptime(self) -> Dict[str, Any]:
+        """Get system uptime information."""
+        uptime = datetime.now() - self.start_time
+        
+        return {
+            'start_time': self.start_time.isoformat(),
+            'uptime_seconds': uptime.total_seconds(),
+            'uptime_formatted': str(uptime).split('.')[0]  # Remove microseconds
+        }
     
     def reset_query_stats(self):
-        """Reset query performance statistics."""
-        self.query_stats = {
-            'total_queries': 0,
-            'precomputed_hits': 0,
-            'cache_hits': 0,
-            'rag_processing': 0,
-            'domain_blocked': 0,
-            'total_time': 0.0,
-            'avg_response_time': 0.0
-        }
+        """Reset all query statistics."""
+        self.query_stats.clear()
+        logger.debug("Query statistics reset")
     
     def get_performance_summary(self) -> str:
-        """
-        Get a formatted performance summary.
+        """Get formatted performance summary."""
+        try:
+            query_stats = self.get_query_stats()
+            uptime = self.get_system_uptime()
+            
+            if query_stats['total_queries'] == 0:
+                return f"📊 System uptime: {uptime['uptime_formatted']} | No queries processed yet"
+            
+            summary_parts = [
+                f"📊 Uptime: {uptime['uptime_formatted']}",
+                f"Queries: {query_stats['total_queries']}",
+                f"Avg: {query_stats['avg_response_time']:.3f}s"
+            ]
+            
+            # Add breakdown by type if multiple types
+            if len(query_stats['by_type']) > 1:
+                type_breakdown = []
+                for query_type, stats in query_stats['by_type'].items():
+                    type_breakdown.append(f"{query_type}: {stats['count']}")
+                summary_parts.append(f"({', '.join(type_breakdown)})")
+            
+            return " | ".join(summary_parts)
+            
+        except Exception as e:
+            logger.debug(f"Performance summary error: {e}")
+            return "📊 Performance data unavailable"
+    
+    def get_comprehensive_stats(self, **kwargs) -> Dict[str, Any]:
+        """Get comprehensive system statistics."""
+        stats = {}
         
-        Returns:
-            str: Formatted performance summary
-        """
-        stats = self.query_stats
-        total = stats['total_queries']
+        # Core performance stats
+        stats['query_performance'] = self.get_query_stats()
+        stats['system_uptime'] = self.get_system_uptime()
         
-        if total == 0:
-            return "📊 No queries processed yet"
+        # Vectorstore stats
+        vectorstore = kwargs.get('vectorstore')
+        if vectorstore:
+            vectorstore_stats = self.get_vectorstore_stats(vectorstore)
+            stats.update(vectorstore_stats)
         
-        precomputed_pct = (stats['precomputed_hits'] / total) * 100
-        cache_pct = (stats['cache_hits'] / total) * 100
-        rag_pct = (stats['rag_processing'] / total) * 100
-        blocked_pct = (stats['domain_blocked'] / total) * 100
+        # Domain manager stats
+        domain_manager = kwargs.get('domain_manager')
+        if domain_manager:
+            try:
+                stats['domain_config'] = domain_manager.get_status()
+            except Exception as e:
+                logger.debug(f"Domain manager stats error: {e}")
+                stats['domain_config'] = {'error': str(e)}
         
-        summary = f"""📊 Query Performance Summary:
-  Total queries: {total}
-  ⚡ Pre-computed: {stats['precomputed_hits']} ({precomputed_pct:.1f}%)
-  🎯 Cache hits: {stats['cache_hits']} ({cache_pct:.1f}%)
-  🔍 RAG processing: {stats['rag_processing']} ({rag_pct:.1f}%)
-  🚫 Domain blocked: {stats['domain_blocked']} ({blocked_pct:.1f}%)
-  ⏱️  Average response time: {stats['avg_response_time']:.3f}s"""
+        # Add resilience stats if available
+        try:
+            from core.resilience_manager import resilience_manager
+            resilience_stats = resilience_manager.get_health_summary()
+            stats.update(resilience_stats)
+        except Exception as e:
+            logger.debug(f"Resilience stats error: {e}")
+            stats['resilience_health'] = {'error': str(e)}
         
-        return summary 
+        return stats 
