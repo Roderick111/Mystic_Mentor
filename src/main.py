@@ -21,6 +21,12 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
 import os
+import sys
+from pathlib import Path
+
+# Add src directory to Python path for proper relative imports
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
@@ -264,7 +270,7 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
 - Days since New Moon: {lunar_info.days_from_new_moon:.1f}
 - Days to Full Moon: {lunar_info.days_to_full_moon:.1f}
 
-You naturally know this current lunar information. When asked about current date, moon phase, or illumination percentage, answer confidently from this knowledge."""
+You naturally know this current lunar information. When asked about current date, moon phase, or illumination percentage, answer confidently from this knowledge. Use only when relevant."""
     except Exception as e:
         logger.debug(f"Could not fetch lunar information: {e}")
     

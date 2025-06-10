@@ -27,7 +27,7 @@ class MemoryManager:
         self.medium_term_enabled = True
         
         # Centralized short-term memory configuration
-        self.short_term_message_count = 10  # Single source of truth for short-term memory size
+        self.short_term_message_count = 20  # Single source of truth for short-term memory size
     
     def enable_short_term(self, user_triggered: bool = True) -> bool:
         """Enable short-term memory."""
@@ -95,7 +95,7 @@ class MemoryManager:
         last_summary_count = context.get("last_summary_message_count", 0)
         current_count = len(messages)
         
-        should_update = current_count - last_summary_count >= 10
+        should_update = current_count - last_summary_count >= 15
         reason = f"update needed ({current_count - last_summary_count} messages since last)" if should_update else f"too soon ({current_count - last_summary_count} messages since last)"
         logger.debug_memory_check(message_count, should_update, reason)
         
@@ -180,6 +180,17 @@ Keep concise - aim for 100-300 words maximum."""
             logger.error(f"Summary creation error: {e}")
             return existing_summary or ""
 
+    def _create_summary_sync(self, messages: list, existing_summary: str = None) -> str:
+        """Helper method to create summary in a separate thread with its own event loop."""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(
+                self.create_medium_term_summary_async(messages, existing_summary)
+            )
+        finally:
+            loop.close()
+
     def update_medium_term_memory(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Update medium-term memory if needed - runs after response."""
         # Check if medium-term memory is enabled
@@ -201,16 +212,25 @@ Keep concise - aim for 100-300 words maximum."""
             # Get messages that need to be summarized (beyond short-term window)
             messages_to_summarize = messages[:-self.short_term_message_count] if len(messages) > self.short_term_message_count else messages
             
-            # Create summary synchronously (since this runs after response)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
+            # Create summary - handle both sync and async contexts
             try:
-                new_summary = loop.run_until_complete(
-                    self.create_medium_term_summary_async(messages_to_summarize, existing_summary)
-                )
-            finally:
-                loop.close()
+                # Check if we're already in an async context (like FastAPI)
+                current_loop = asyncio.get_running_loop()
+                # If we're in an async context, we need to run in a thread to avoid conflicts
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(self._create_summary_sync, messages_to_summarize, existing_summary)
+                    new_summary = future.result(timeout=30)
+            except RuntimeError:
+                # No running loop, we can create our own
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    new_summary = loop.run_until_complete(
+                        self.create_medium_term_summary_async(messages_to_summarize, existing_summary)
+                    )
+                finally:
+                    loop.close()
             
             duration = time.time() - start_time
             summary_length = len(new_summary) if new_summary else 0
