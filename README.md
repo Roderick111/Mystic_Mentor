@@ -80,7 +80,8 @@ esoteric-vectors/
 ## 🚀 Installation & Setup
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.13+
+- [UV package manager](https://docs.astral.sh/uv/) (recommended) or pip
 - OpenAI API key
 - Google Gemini API key
 
@@ -89,14 +90,22 @@ esoteric-vectors/
 git clone <repository-url>
 cd esoteric-vectors
 
-# Create virtual environment
-python -m venv .venv
+# Using UV (recommended)
+uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Alternative: Using pip
+# python -m venv .venv
+# source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 ```
 
 ### 2. Install Dependencies
 ```bash
-pip install -r config/requirements_rag.txt
+# Using UV (recommended)
+uv sync
+
+# Alternative: Using pip
+# pip install -r config/requirements_rag.txt
 ```
 
 ### 3. Configure Environment

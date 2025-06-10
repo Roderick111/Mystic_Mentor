@@ -130,12 +130,12 @@ class QACache:
         from datetime import datetime
         
         collection_metadata = {
-            "version": "1.2.0",
+            "version": "1.3.0",
             "created": datetime.now().isoformat(),
             "embedding_model": "text-embedding-3-small",
-            "description": "Q&A cache for esoteric knowledge with question-only embeddings",
+            "description": "Q&A cache for esoteric knowledge with question-to-question semantic matching",
             "type": "qa_cache",
-            "strategy": "question_embedding_answer_retrieval",
+            "strategy": "question_embedding_question_matching",
             "domains": "lunar,ifs,astrology,crystals,numerology,tarot",
             "hnsw_config": "qa_optimized",
             "last_updated": datetime.now().isoformat(),
@@ -186,7 +186,7 @@ class QACache:
                 domain_filter = {"domain": {"$in": active_domains}}
                 logger.debug_optimization(f"Q&A Cache: Applying domain filter: {domain_filter}")
             
-            # Search for similar questions
+            # Search for similar questions (now questions are embedded, not answers)
             if domain_filter:
                 docs = self.vectorstore.similarity_search_with_score(query, k=k, filter=domain_filter)
             else:
@@ -215,8 +215,8 @@ class QACache:
             # Extract Q&A data from metadata
             metadata = best_doc.metadata
             result = {
-                'question': metadata.get('question', ''),
-                'answer': best_doc.page_content,
+                'question': best_doc.page_content,
+                'answer': metadata.get('answer', ''),
                 'domain': metadata.get('domain', 'unknown'),
                 'source': metadata.get('source', 'unknown'),
                 'similarity': similarity,
@@ -245,18 +245,18 @@ class QACache:
             if not qa_id:
                 qa_id = str(uuid.uuid4())
             
-            # Create document
+            # Create document with QUESTION as content and ANSWER in metadata
             metadata = {
-                'question': question,
+                'answer': answer,
                 'domain': domain,
                 'source': source,
                 'qa_id': qa_id,
                 'created': datetime.now().isoformat()
             }
             
-            # Add to vectorstore (answer is the content, question is in metadata)
+            # Add to vectorstore (question is the content, answer is in metadata)
             self.vectorstore.add_texts(
-                texts=[answer],
+                texts=[question],
                 metadatas=[metadata],
                 ids=[qa_id]
             )
@@ -303,14 +303,14 @@ class QACache:
                     qa_id = pair.get('qa_id') or str(uuid.uuid4())
                     
                     metadata = {
-                        'question': pair['question'],
+                        'answer': pair['answer'],
                         'domain': pair['domain'],
                         'source': pair.get('source', 'batch'),
                         'qa_id': qa_id,
                         'created': datetime.now().isoformat()
                     }
                     
-                    texts.append(pair['answer'])
+                    texts.append(pair['question'])
                     metadatas.append(metadata)
                     ids.append(qa_id)
                 

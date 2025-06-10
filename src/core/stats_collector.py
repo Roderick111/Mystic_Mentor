@@ -6,6 +6,7 @@ Clean statistics collection with:
 - Query performance tracking
 - Vectorstore health monitoring
 - Resilience metrics integration
+- Memory system monitoring
 - Clean logging
 """
 
@@ -26,6 +27,7 @@ class StatsCollector:
     - Vectorstore health and document counts
     - System resilience metrics
     - Cache hit rates and efficiency
+    - Memory system performance
     """
     
     def __init__(self, max_recent_queries: int = 100):
@@ -38,6 +40,15 @@ class StatsCollector:
             'total_time': 0.0,
             'recent_times': deque(maxlen=max_recent_queries)
         })
+        
+        # Memory system tracking
+        self.memory_stats = {
+            'summaries_created': 0,
+            'summary_creation_times': deque(maxlen=50),
+            'memory_context_builds': 0,
+            'short_term_trims': 0,
+            'toggles': defaultdict(int)  # Track toggle operations
+        }
         
         # System start time
         self.start_time = datetime.now()
@@ -52,6 +63,54 @@ class StatsCollector:
         stats['recent_times'].append(response_time)
         
         logger.debug(f"Recorded {query_type} query: {response_time:.3f}s")
+    
+    def record_memory_summary_creation(self, creation_time: float, summary_length: int):
+        """Record memory summary creation."""
+        self.memory_stats['summaries_created'] += 1
+        self.memory_stats['summary_creation_times'].append(creation_time)
+        logger.debug(f"Recorded memory summary creation: {creation_time:.3f}s, {summary_length} chars")
+    
+    def record_memory_context_build(self):
+        """Record memory context building."""
+        self.memory_stats['memory_context_builds'] += 1
+    
+    def record_short_term_trim(self):
+        """Record short-term memory trimming."""
+        self.memory_stats['short_term_trims'] += 1
+    
+    def record_memory_toggle(self, memory_type: str, enabled: bool):
+        """Record memory toggle operation."""
+        action = f"{memory_type}_{'enabled' if enabled else 'disabled'}"
+        self.memory_stats['toggles'][action] += 1
+        logger.debug(f"Recorded memory toggle: {action}")
+    
+    def get_memory_stats(self) -> Dict[str, Any]:
+        """Get memory system statistics."""
+        stats = self.memory_stats.copy()
+        
+        # Calculate averages
+        if stats['summary_creation_times']:
+            avg_creation_time = sum(stats['summary_creation_times']) / len(stats['summary_creation_times'])
+            stats['avg_summary_creation_time'] = avg_creation_time
+        else:
+            stats['avg_summary_creation_time'] = 0.0
+        
+        return stats
+    
+    def get_comprehensive_memory_stats(self, memory_manager=None) -> Dict[str, Any]:
+        """Get comprehensive memory system statistics."""
+        stats = self.get_memory_stats()
+        
+        if memory_manager:
+            # Get current memory status
+            memory_status = memory_manager.get_memory_status()
+            stats['current_status'] = memory_status
+            
+            # Get memory manager internal stats
+            manager_stats = memory_manager.get_memory_stats()
+            stats['manager_status'] = manager_stats
+        
+        return stats
     
     def get_query_stats(self) -> Dict[str, Any]:
         """Get comprehensive query performance statistics."""
@@ -228,4 +287,93 @@ class StatsCollector:
             logger.debug(f"Resilience stats error: {e}")
             stats['resilience_health'] = {'error': str(e)}
         
-        return stats 
+        return stats
+    
+    def print_comprehensive_stats(self, **kwargs):
+        """Print comprehensive system statistics to console."""
+        try:
+            print("📊 System Statistics")
+            print("=" * 50)
+            
+            # System uptime
+            uptime = self.get_system_uptime()
+            print(f"⏱️  Uptime: {uptime['uptime_formatted']}")
+            
+            # Query performance
+            query_stats = self.get_query_stats()
+            if query_stats['total_queries'] > 0:
+                print(f"📈 Query Performance:")
+                print(f"   Total queries: {query_stats['total_queries']}")
+                print(f"   Average response time: {query_stats['avg_response_time']:.3f}s")
+                
+                if len(query_stats['by_type']) > 1:
+                    print(f"   By type:")
+                    for query_type, stats in query_stats['by_type'].items():
+                        print(f"     {query_type}: {stats['count']} queries, {stats['avg_response_time']:.3f}s avg")
+            else:
+                print("📈 Query Performance: No queries processed yet")
+            
+            # Memory statistics
+            memory_stats = self.get_memory_stats()
+            print(f"🧠 Memory System:")
+            print(f"   Summaries created: {memory_stats['summaries_created']}")
+            print(f"   Context builds: {memory_stats['memory_context_builds']}")
+            print(f"   Short-term trims: {memory_stats['short_term_trims']}")
+            
+            if memory_stats['avg_summary_creation_time'] > 0:
+                print(f"   Avg summary creation: {memory_stats['avg_summary_creation_time']:.3f}s")
+            
+            if memory_stats['toggles']:
+                print(f"   Toggle operations:")
+                for action, count in memory_stats['toggles'].items():
+                    print(f"     {action}: {count}")
+            
+            # Add memory manager status if available
+            memory_manager = kwargs.get('memory_manager')
+            if memory_manager:
+                status = memory_manager.get_memory_status()
+                manager_stats = memory_manager.get_memory_stats()
+                print(f"   Current status: ST:{status['short_term']}, MT:{status['medium_term']}")
+                print(f"   Manager status: {manager_stats['status']}")
+            
+            # Vectorstore stats
+            vectorstore = kwargs.get('vectorstore')
+            if vectorstore:
+                vectorstore_stats = self.get_vectorstore_stats(vectorstore)
+                print(f"📚 Vectorstore: {vectorstore_stats.get('vectorstore_docs', 0)} documents")
+                if 'collection_health' in vectorstore_stats:
+                    health = vectorstore_stats['collection_health']
+                    print(f"   Health: {health.get('status', 'unknown')}")
+            
+            # Domain manager stats
+            domain_manager = kwargs.get('domain_manager')
+            if domain_manager:
+                try:
+                    domain_status = domain_manager.get_status()
+                    active_domains = domain_status.get('active_domains', [])
+                    print(f"🎯 Domains: {len(active_domains)} active - {', '.join(active_domains) if active_domains else 'None'}")
+                except Exception as e:
+                    logger.debug(f"Domain manager stats error: {e}")
+            
+            # Q&A Cache stats
+            qa_cache = kwargs.get('qa_cache')
+            if qa_cache:
+                try:
+                    qa_stats = qa_cache.get_stats()
+                    print(f"⚡ Q&A Cache: {qa_stats.get('total_qa_pairs', 0)} pairs, {qa_stats.get('hit_rate', 0):.1f}% hit rate")
+                except Exception as e:
+                    logger.debug(f"Q&A cache stats error: {e}")
+            
+            # System health
+            try:
+                from core.resilience_manager import resilience_manager
+                resilience_stats = resilience_manager.get_health_summary()
+                if resilience_stats.get('resilience_health', {}).get('overall_healthy'):
+                    print("🛡️ System Health: All services operational")
+                else:
+                    print("⚠️ System Health: Some services degraded")
+            except Exception as e:
+                logger.debug(f"Resilience stats error: {e}")
+                
+        except Exception as e:
+            logger.error(f"Stats printing error: {e}") 

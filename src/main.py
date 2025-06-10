@@ -6,18 +6,23 @@ Clean multi-agent system with:
 - Emotional and logical response modes
 - Domain-aware RAG retrieval
 - Q&A cache optimization
+- Medium-term memory via summarization
 - Clean logging and error handling
 """
 
 from dotenv import load_dotenv
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Any
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.messages.utils import trim_messages, count_tokens_approximately
+from langgraph.checkpoint.memory import MemorySaver
+import uuid
+import os
+import json
+from datetime import datetime
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
@@ -25,6 +30,7 @@ from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
 from utils.logger import logger, set_debug_mode
+from memory import MemoryManager
 
 load_dotenv()
 
@@ -37,6 +43,130 @@ semantic_detector = SemanticDomainDetector()
 negative_detector = NegativeIntentDetector()
 qa_cache = QACache()
 rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)
+
+# Initialize memory manager with stats collector
+memory_manager = MemoryManager(llm, rag_system.stats_collector)
+
+class SessionManager:
+    """Simple session management for conversation tracking."""
+    
+    def __init__(self, sessions_dir: str = "data/sessions"):
+        self.sessions_dir = sessions_dir
+        os.makedirs(sessions_dir, exist_ok=True)
+        
+    def create_session(self) -> dict:
+        """Create a new session with UUID."""
+        session_id = str(uuid.uuid4())
+        session_metadata = {
+            "session_id": session_id,
+            "created_at": datetime.now().isoformat(),
+            "last_activity": datetime.now().isoformat(),
+            "message_count": 0,
+            "domains_used": [],
+            "memory_created": False
+        }
+        self._save_session_metadata(session_id, session_metadata)
+        print(f"🆔 New session created: {session_id[:8]}...")
+        return {
+            "session_id": session_id,
+            "session_metadata": session_metadata
+        }
+    
+    def load_session(self, session_id: str) -> dict:
+        """Load an existing session by ID."""
+        try:
+            session_path = self.get_session_path(session_id)
+            if os.path.exists(session_path):
+                with open(session_path, 'r') as f:
+                    session_metadata = json.load(f)
+                print(f"🆔 Loaded session: {session_id[:8]}...")
+                return {
+                    "session_id": session_id,
+                    "session_metadata": session_metadata
+                }
+            else:
+                print(f"❌ Session {session_id[:8]}... not found")
+                return None
+        except Exception as e:
+            logger.error(f"Failed to load session: {e}")
+            return None
+    
+    def session_exists(self, session_id: str) -> bool:
+        """Check if a session exists."""
+        try:
+            session_path = self.get_session_path(session_id)
+            return os.path.exists(session_path)
+        except Exception:
+            return False
+    
+    def find_session_by_partial_id(self, partial_id: str) -> str:
+        """Find a session by partial ID (first 8 characters)."""
+        try:
+            for filename in os.listdir(self.sessions_dir):
+                if filename.endswith('.json'):
+                    session_id = filename[:-5]  # Remove .json extension
+                    if session_id.startswith(partial_id):
+                        return session_id
+            return None
+        except Exception:
+            return None
+    
+    def get_session_path(self, session_id: str) -> str:
+        """Get the file path for a session."""
+        return os.path.join(self.sessions_dir, f"{session_id}.json")
+    
+    def _save_session_metadata(self, session_id: str, metadata: dict):
+        """Save session metadata to file."""
+        try:
+            session_path = self.get_session_path(session_id)
+            with open(session_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save session metadata: {e}")
+    
+    def update_session_activity(self, session_id: str, domains_used: list = None):
+        """Update session activity timestamp and metadata."""
+        try:
+            session_path = self.get_session_path(session_id)
+            if os.path.exists(session_path):
+                with open(session_path, 'r') as f:
+                    metadata = json.load(f)
+                
+                metadata["last_activity"] = datetime.now().isoformat()
+                metadata["message_count"] = metadata.get("message_count", 0) + 1
+                
+                if domains_used:
+                    current_domains = set(metadata.get("domains_used", []))
+                    current_domains.update(domains_used)
+                    metadata["domains_used"] = list(current_domains)
+                
+                self._save_session_metadata(session_id, metadata)
+        except Exception as e:
+            logger.error(f"Failed to update session activity: {e}")
+    
+    def list_sessions(self, limit: int = 10) -> list:
+        """List recent sessions."""
+        try:
+            session_files = []
+            for filename in os.listdir(self.sessions_dir):
+                if filename.endswith('.json'):
+                    session_path = os.path.join(self.sessions_dir, filename)
+                    try:
+                        with open(session_path, 'r') as f:
+                            metadata = json.load(f)
+                        session_files.append(metadata)
+                    except Exception:
+                        continue
+            
+            # Sort by last activity (newest first)
+            session_files.sort(key=lambda x: x.get("last_activity", ""), reverse=True)
+            return session_files[:limit]
+        except Exception as e:
+            logger.error(f"Failed to list sessions: {e}")
+            return []
+
+# Initialize session manager
+session_manager = SessionManager()
 
 class CombinedDecision(BaseModel):
     """Combined classification and RAG decision for optimal performance."""
@@ -52,6 +182,12 @@ class State(TypedDict):
     message_type: str | None
     should_use_rag: bool | None
     rag_context: str | None
+    # Medium-term memory fields
+    medium_term_summary: str | None
+    context: dict[str, Any]  # For tracking summarization state
+    # Session tracking
+    session_id: str | None
+    session_metadata: dict[str, Any] | None
 
 def classify_and_decide_rag(state: State):
     """Combined message classification and RAG decision for optimal performance."""
@@ -88,6 +224,8 @@ Do NOT use RAG for:
         "message_type": result.message_type,
         "should_use_rag": result.should_use_rag
     }
+
+
 
 def router(state: State):
     """Route to appropriate agent based on message type."""
@@ -185,21 +323,13 @@ def build_domain_guidance(active_domains: list, agent_type: str) -> str:
     
     return ""
 
+
+
 def create_agent_response(state: State, agent_type: str) -> dict:
     """Unified agent response creation for both therapist and logical agents."""
     last_message = state["messages"][-1]
     should_use_rag = state.get("should_use_rag", False)
     rag_result = get_rag_context(last_message.content, should_use_rag)
-    
-    trimmed_messages = trim_messages(
-        state["messages"],
-        strategy="last",
-        token_counter=count_tokens_approximately,
-        max_tokens=2000,
-        start_on="human",
-        include_system=True,
-        allow_partial=False
-    )
     
     # System prompts for each agent type
     system_prompts = {
@@ -231,6 +361,11 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     system_content = system_prompts[agent_type]
     active_domains = rag_system.get_domain_status()["active_domains"]
     system_content += build_domain_guidance(active_domains, agent_type)
+    
+    # Add memory context to system prompt
+    memory_context = memory_manager.build_memory_context(state)
+    if memory_context:
+        system_content += f"\n\n## Conversation Memory\n{memory_context}\n\nUse this memory context to provide continuity and personalized responses."
     
     rag_context = rag_result["content"]
     rag_type = rag_result["type"]
@@ -271,14 +406,21 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     
     # Create conversation and get response
     conversation_messages = [{"role": "system", "content": system_content}]
-    for msg in trimmed_messages:
-        if isinstance(msg, HumanMessage):
-            conversation_messages.append({"role": "user", "content": msg.content})
-        elif isinstance(msg, AIMessage):
-            conversation_messages.append({"role": "assistant", "content": msg.content})
+    
+    # Get conversation history using centralized memory manager method
+    current_message = last_message.content
+    conversation_history = memory_manager.get_conversation_history(state, current_message)
+    conversation_messages.extend(conversation_history)
     
     reply = llm.invoke(conversation_messages)
-    return {"messages": [AIMessage(content=reply.content)], "rag_context": rag_context}
+    
+    # Update memory after response (your "response first, memory later" approach)
+    memory_updates = memory_manager.update_medium_term_memory(state)
+    
+    response_dict = {"messages": [AIMessage(content=reply.content)], "rag_context": rag_context}
+    response_dict.update(memory_updates)  # Add any memory updates to the state
+    
+    return response_dict
 
 def therapist_agent(state: State):
     """Emotional healing and guidance agent."""
@@ -287,6 +429,9 @@ def therapist_agent(state: State):
 def logical_agent(state: State):
     """Logical teaching and explanation agent."""
     return create_agent_response(state, "logical")
+
+# Initialize checkpointer for session persistence
+checkpointer = MemorySaver()
 
 # Build the agent graph
 graph_builder = StateGraph(State)
@@ -301,50 +446,32 @@ graph_builder.add_conditional_edges("router", lambda state: state.get("next"), {
 graph_builder.add_edge("therapist", END)
 graph_builder.add_edge("logical", END)
 
-graph = graph_builder.compile()
+# Compile with checkpointer for session persistence
+graph = graph_builder.compile(checkpointer=checkpointer)
 
 def print_stats():
     """Print comprehensive system statistics."""
     try:
-        # RAG system stats
-        stats = rag_system.get_stats()
-        total_chunks = stats.get('vectorstore_docs', 0)
-        active_domains = len(stats.get('domain_config', {}).get('active_domains', []))
-        
-        print(f"📊 RAG: {total_chunks} chunks, {active_domains} domains active")
-        
-        perf = stats.get('query_performance', {})
-        if perf.get('total_queries', 0) > 0:
-            print(f"⚡ RAG: {perf.get('total_queries', 0)} queries, {perf.get('avg_response_time', 0):.3f}s avg")
-        
-        # Q&A Cache stats
-        qa_stats = qa_cache.get_stats()
-        print(f"⚡ Q&A Cache: {qa_stats['total_qa_pairs']} pairs, {qa_stats['hit_rate']:.1f}% hit rate")
-        if qa_stats['total_queries'] > 0:
-            print(f"📊 Q&A Queries: {qa_stats['total_queries']} total, {qa_stats['avg_response_time']:.3f}s avg")
-        
-        # System health
-        resilience_health = stats.get('resilience_health', {})
-        if resilience_health.get('overall_healthy'):
-            print("🛡️ System Health: All services operational")
-        else:
-            print("⚠️ System Health: Some services degraded")
-        
-        # Domain detection stats
-        if semantic_detector.is_available():
-            detector_stats = semantic_detector.get_stats()
-            print(f"🔍 Domain Detection: {detector_stats['cache_hits']} cache hits, {detector_stats['domains_loaded']} domains loaded")
-        else:
-            logger.debug("Domain detection not available")
+        # Use the enhanced stats collector
+        rag_system.stats_collector.print_comprehensive_stats(
+            vectorstore=rag_system.vectorstore,
+            domain_manager=domain_manager,
+            qa_cache=qa_cache,
+            memory_manager=memory_manager
+        )
             
     except Exception as e:
         logger.error(f"Stats error: {e}")
 
-def handle_command(user_input: str) -> bool:
+def handle_command(user_input: str, state: dict) -> bool:
     """Handle system commands. Returns True if command was handled."""
     try:
         if user_input == "stats":
             print_stats()
+            return True
+        elif user_input == "memory":
+            # Delegate memory status display to memory manager
+            memory_manager.display_memory_status(state)
             return True
         elif user_input == "cache clear":
             rag_system.clear_caches()
@@ -382,6 +509,71 @@ def handle_command(user_input: str) -> bool:
         elif user_input == "debug off":
             set_debug_mode(False)
             return True
+        elif user_input == "memory enable short":
+            memory_manager.enable_short_term()
+            return True
+        elif user_input == "memory disable short":
+            memory_manager.disable_short_term()
+            return True
+        elif user_input == "memory enable medium":
+            memory_manager.enable_medium_term()
+            return True
+        elif user_input == "memory disable medium":
+            memory_manager.disable_medium_term()
+            return True
+        elif user_input == "memory status":
+            # Use the same detailed display as "memory" command for consistency
+            memory_manager.display_memory_status(state)
+            return True
+        elif user_input.startswith("session change "):
+            session_input = user_input.replace("session change ", "").strip()
+            
+            if session_input == "new":
+                # Create new session and signal to restart
+                new_session_info = session_manager.create_session()
+                # Store in state to signal restart with new session
+                state["_new_session"] = new_session_info
+                return "restart_session"
+            else:
+                # Try to find session by partial ID
+                full_session_id = session_manager.find_session_by_partial_id(session_input)
+                if full_session_id:
+                    session_info = session_manager.load_session(full_session_id)
+                    if session_info:
+                        # Store in state to signal restart with existing session
+                        state["_new_session"] = session_info
+                        return "restart_session"
+                    else:
+                        print(f"❌ Failed to load session {session_input}")
+                        return True
+                else:
+                    print(f"❌ Session not found: {session_input}")
+                    print("💡 Use 'session list' to see available sessions")
+                    return True
+        elif user_input == "session list":
+            sessions = session_manager.list_sessions()
+            if sessions:
+                print("📋 Recent sessions:")
+                for i, session in enumerate(sessions[:5]):
+                    session_id = session['session_id'][:8]
+                    created = session.get('created_at', 'Unknown')[:19].replace('T', ' ')
+                    msg_count = session.get('message_count', 0)
+                    domains = ', '.join(session.get('domains_used', [])) or 'None'
+                    print(f"  {i+1}. {session_id}... ({created}) - {msg_count} msgs, domains: {domains}")
+            else:
+                print("📋 No sessions found")
+            return True
+        elif user_input == "session info":
+            session_id = state.get("session_id")
+            if session_id:
+                metadata = state.get("session_metadata", {})
+                print(f"🆔 Current Session: {session_id[:8]}...")
+                print(f"📅 Created: {metadata.get('created_at', 'Unknown')[:19].replace('T', ' ')}")
+                print(f"💬 Messages: {metadata.get('message_count', 0)}")
+                print(f"🎯 Domains used: {', '.join(metadata.get('domains_used', [])) or 'None'}")
+            else:
+                print("🆔 No active session")
+            return True
         
         return False
     except Exception as e:
@@ -389,10 +581,53 @@ def handle_command(user_input: str) -> bool:
         return True
 
 def run_chatbot():
-    """Main chatbot loop with clean command handling."""
-    state = {"messages": [], "message_type": None, "should_use_rag": None, "rag_context": None}
+    """Main chatbot loop with session management and clean command handling."""
     
-    # System ready message with active domains
+    def initialize_session(session_info=None):
+        """Initialize or switch to a session."""
+        if session_info is None:
+            # Create a new session
+            session_info = session_manager.create_session()
+        
+        session_id = session_info["session_id"]
+        
+        # Initialize state with session info
+        state = {
+            "messages": [], 
+            "message_type": None, 
+            "should_use_rag": None, 
+            "rag_context": None, 
+            "medium_term_summary": None, 
+            "context": {},
+            "session_id": session_id,
+            "session_metadata": session_info["session_metadata"]
+        }
+        
+        # LangGraph configuration for checkpointing
+        config = {"configurable": {"thread_id": session_id}}
+        
+        # Try to restore session state from checkpointer if switching to existing session
+        if session_info["session_metadata"].get("message_count", 0) > 0:
+            try:
+                # Get the current state from checkpointer
+                current_state = graph.get_state(config)
+                if current_state and current_state.values:
+                    print(f"🔄 Restoring conversation with {len(current_state.values.get('messages', []))} messages...")
+                    state.update(current_state.values)
+                    # Ensure session metadata is preserved
+                    state["session_id"] = session_id
+                    state["session_metadata"] = session_info["session_metadata"]
+                else:
+                    print(f"🆔 Switched to session {session_id[:8]}... (empty conversation)")
+            except Exception as e:
+                print(f"🆔 Switched to session {session_id[:8]}... (new conversation)")
+        
+        return state, config
+    
+    # Initialize first session
+    current_state, current_config = initialize_session()
+    
+    # System ready message with active domains (only shown once)
     stats = rag_system.get_stats()
     total_chunks = stats.get('vectorstore_docs', 0)
     active_domains = stats.get('domain_config', {}).get('active_domains', [])
@@ -407,7 +642,11 @@ def run_chatbot():
         print("🎯 Active domains: None")
     
     print("🤖 Esoteric AI Agent")
-    print("Commands: 'exit', 'stats', 'domains', 'cache clear', 'cache stats clear', 'qa cache clear', 'domains enable <domain>', 'domains disable <domain>', 'debug on/off'")
+    print("Commands: 'exit', 'stats', 'memory', 'domains', 'cache clear', 'debug on/off'")
+    print("Memory: 'memory enable/disable short', 'memory enable/disable medium'")
+    print("Note: 'memory' and 'memory status' commands show the same detailed information")
+    print("Domains: 'domains enable/disable <domain>'")
+    print("Sessions: 'session list', 'session info', 'session change <id|new>'")
     print()
     
     while True:
@@ -419,24 +658,46 @@ def run_chatbot():
             break
         
         # Handle commands
-        if handle_command(user_input):
+        command_result = handle_command(user_input, current_state)
+        if command_result == "restart_session":
+            # Session change requested
+            new_session_info = current_state.get("_new_session")
+            if new_session_info:
+                current_state, current_config = initialize_session(new_session_info)
+                # Remove the temporary session info
+                current_state.pop("_new_session", None)
+            continue
+        elif command_result:
             continue
         
         # Process user message
         try:
             # Add user message to state
-            state["messages"].append(HumanMessage(content=user_input))
+            current_state["messages"].append(HumanMessage(content=user_input))
             
-            # Process through agent graph
-            result = graph.invoke(state)
+            # Process through agent graph with session config
+            result = graph.invoke(current_state, config=current_config)
             
             # Update state with result
-            state.update(result)
+            current_state.update(result)
+            
+            # Update session activity
+            session_id = current_state["session_id"]
+            active_domains = rag_system.get_domain_status().get("active_domains", [])
+            session_manager.update_session_activity(session_id, active_domains)
+            
+            # Update session metadata in state
+            if "session_metadata" in current_state:
+                current_state["session_metadata"]["message_count"] = current_state["session_metadata"].get("message_count", 0) + 1
+                if active_domains:
+                    current_domains = set(current_state["session_metadata"].get("domains_used", []))
+                    current_domains.update(active_domains)
+                    current_state["session_metadata"]["domains_used"] = list(current_domains)
             
             # Display response with cache indicators
-            if state.get("messages") and len(state["messages"]) > 0:
-                last_message = state["messages"][-1]
-                rag_context = state.get("rag_context")
+            if current_state.get("messages") and len(current_state["messages"]) > 0:
+                last_message = current_state["messages"][-1]
+                rag_context = current_state.get("rag_context")
                 
                 # Response type indicators
                 cache_indicator = ""
@@ -448,6 +709,10 @@ def run_chatbot():
                     cache_indicator = "🚫 "  # Domain blocked
                 elif rag_context:
                     cache_indicator = "🔍 "  # RAG used
+                
+                # Add memory indicator if medium-term memory is being used
+                if current_state.get("medium_term_summary"):
+                    cache_indicator += "🧠 "  # Medium-term memory active
                 
                 if hasattr(last_message, 'content'):
                     print(f"{cache_indicator}Assistant: {last_message.content}")

@@ -8,7 +8,7 @@ Only shows important messages by default, detailed logs in debug mode.
 
 import os
 import logging
-from typing import Optional
+from typing import Optional, Dict, Any
 from enum import Enum
 
 class LogLevel(Enum):
@@ -119,6 +119,65 @@ class EsotericLogger:
         """Log health check debug messages (only in debug mode)."""
         if self.debug_mode:
             print(f"🏥 HEALTH: {message}")
+    
+    # Memory-specific logging methods
+    def memory_toggle(self, memory_type: str, enabled: bool):
+        """Log memory toggle operations (always shown)."""
+        status = "enabled" if enabled else "disabled"
+        icon = "✅" if enabled else "🔇"
+        print(f"{icon} {memory_type.title()} memory {status}")
+    
+
+    
+    def memory_summary_created(self, message_count: int, summary_length: int):
+        """Log medium-term summary creation (always shown)."""
+        print(f"🧠 Medium-term summary created: {message_count} messages → {summary_length} chars")
+    
+    def debug_memory_check(self, message_count: int, should_create: bool, reason: str):
+        """Log memory check decisions (debug mode only)."""
+        if self.debug_mode:
+            decision = "CREATE" if should_create else "SKIP"
+            print(f"🧠 MEMORY CHECK: {message_count} messages → {decision} ({reason})")
+    
+    def debug_memory_trimming(self, original_count: int, trimmed_count: int, method: str):
+        """Log message retrieval for short-term memory (debug mode only)."""
+        if self.debug_mode:
+            print(f"🧠 MEMORY TRIM: {original_count} → {trimmed_count} messages ({method})")
+    
+    def debug_memory_context(self, has_short_term: bool, has_medium_term: bool, context_length: int):
+        """Log memory context building (debug mode only)."""
+        if self.debug_mode:
+            parts = []
+            if has_short_term:
+                parts.append("short-term")
+            if has_medium_term:
+                parts.append("medium-term")
+            context_parts = ", ".join(parts) if parts else "none"
+            print(f"🧠 MEMORY CONTEXT: {context_parts} → {context_length} chars")
+    
+    def debug_memory_update_start(self, message_count: int, existing_summary: bool):
+        """Log start of memory update process (debug mode only)."""
+        if self.debug_mode:
+            status = "updating" if existing_summary else "creating initial"
+            print(f"🧠 MEMORY UPDATE START: {status} summary for {message_count} messages")
+    
+    def debug_memory_update_complete(self, success: bool, new_length: int, duration: float):
+        """Log completion of memory update process (debug mode only)."""
+        if self.debug_mode:
+            if success:
+                print(f"🧠 MEMORY UPDATE COMPLETE: {new_length} chars in {duration:.3f}s")
+            else:
+                print(f"🧠 MEMORY UPDATE FAILED after {duration:.3f}s")
+    
+    def debug_memory_filtering(self, total_messages: int, conversation_messages: int):
+        """Log conversation message processing for summarization (debug mode only)."""
+        if self.debug_mode:
+            print(f"🧠 MEMORY PROCESSING: {total_messages} total → {conversation_messages} conversation messages for summary")
+    
+    def debug_memory_disabled(self, memory_type: str, operation: str):
+        """Log when memory operations are skipped due to being disabled (debug mode only)."""
+        if self.debug_mode:
+            print(f"🧠 MEMORY SKIP: {memory_type} memory disabled, skipping {operation}")
 
 # Global logger instance
 logger = EsotericLogger()
