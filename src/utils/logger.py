@@ -122,7 +122,14 @@ class EsotericLogger:
     
     # Memory-specific logging methods
     def memory_toggle(self, memory_type: str, enabled: bool):
-        """Log memory toggle operations (always shown)."""
+        """Log memory toggle operations (debug mode only for system messages)."""
+        if self.debug_mode:
+            status = "enabled" if enabled else "disabled"
+            icon = "✅" if enabled else "🔇"
+            print(f"{icon} {memory_type.title()} memory {status}")
+    
+    def memory_toggle_user(self, memory_type: str, enabled: bool):
+        """Log memory toggle operations triggered by user commands (always shown)."""
         status = "enabled" if enabled else "disabled"
         icon = "✅" if enabled else "🔇"
         print(f"{icon} {memory_type.title()} memory {status}")

@@ -29,34 +29,46 @@ class MemoryManager:
         # Centralized short-term memory configuration
         self.short_term_message_count = 10  # Single source of truth for short-term memory size
     
-    def enable_short_term(self) -> bool:
+    def enable_short_term(self, user_triggered: bool = True) -> bool:
         """Enable short-term memory."""
         self.short_term_enabled = True
-        logger.memory_toggle("short-term", True)
+        if user_triggered:
+            logger.memory_toggle_user("short-term", True)
+        else:
+            logger.memory_toggle("short-term", True)
         if self.stats_collector:
             self.stats_collector.record_memory_toggle("short_term", True)
         return True
     
-    def disable_short_term(self) -> bool:
+    def disable_short_term(self, user_triggered: bool = True) -> bool:
         """Disable short-term memory."""
         self.short_term_enabled = False
-        logger.memory_toggle("short-term", False)
+        if user_triggered:
+            logger.memory_toggle_user("short-term", False)
+        else:
+            logger.memory_toggle("short-term", False)
         if self.stats_collector:
             self.stats_collector.record_memory_toggle("short_term", False)
         return True
     
-    def enable_medium_term(self) -> bool:
+    def enable_medium_term(self, user_triggered: bool = True) -> bool:
         """Enable medium-term memory."""
         self.medium_term_enabled = True
-        logger.memory_toggle("medium-term", True)
+        if user_triggered:
+            logger.memory_toggle_user("medium-term", True)
+        else:
+            logger.memory_toggle("medium-term", True)
         if self.stats_collector:
             self.stats_collector.record_memory_toggle("medium_term", True)
         return True
     
-    def disable_medium_term(self) -> bool:
+    def disable_medium_term(self, user_triggered: bool = True) -> bool:
         """Disable medium-term memory."""
         self.medium_term_enabled = False
-        logger.memory_toggle("medium-term", False)
+        if user_triggered:
+            logger.memory_toggle_user("medium-term", False)
+        else:
+            logger.memory_toggle("medium-term", False)
         if self.stats_collector:
             self.stats_collector.record_memory_toggle("medium_term", False)
         return True
@@ -357,6 +369,34 @@ Keep concise - aim for 100-300 words maximum."""
             "description": "Background summarization",
             "toggles": self.get_memory_status()
         }
+
+    def clear_memories(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Clear all memories from the current session."""
+        try:
+            # Clear medium-term summary
+            state_updates = {
+                "medium_term_summary": None,
+                "context": {}
+            }
+            
+            # Clear message history (keeping current message if any)
+            messages = state.get("messages", [])
+            if messages:
+                # Keep only the last message (current one)
+                state_updates["messages"] = messages[-1:]
+            else:
+                state_updates["messages"] = []
+            
+            print("🧠 Memories cleared")
+            
+            if self.stats_collector:
+                self.stats_collector.record_memory_toggle("memory_clear", True)
+            
+            return state_updates
+            
+        except Exception as e:
+            logger.error(f"Memory clearing error: {e}")
+            return {}
 
     def cleanup(self):
         """Cleanup resources."""

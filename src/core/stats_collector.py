@@ -280,7 +280,7 @@ class StatsCollector:
         
         # Add resilience stats if available
         try:
-            from core.resilience_manager import resilience_manager
+            from .resilience_manager import resilience_manager
             resilience_stats = resilience_manager.get_health_summary()
             stats.update(resilience_stats)
         except Exception as e:
@@ -366,7 +366,7 @@ class StatsCollector:
             
             # System health
             try:
-                from core.resilience_manager import resilience_manager
+                from .resilience_manager import resilience_manager
                 resilience_stats = resilience_manager.get_health_summary()
                 if resilience_stats.get('resilience_health', {}).get('overall_healthy'):
                     print("🛡️ System Health: All services operational")

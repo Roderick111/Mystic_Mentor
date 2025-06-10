@@ -219,7 +219,7 @@ class GracefulDegradation:
     def register_fallback(self, service_name: str, fallback_func: Callable):
         """Register a fallback function for a service."""
         self.fallback_strategies[service_name] = fallback_func
-        logger.info(f"📋 Registered fallback for {service_name}")
+        logger.debug_resilience(f"Registered fallback for {service_name}")
     
     def execute_with_fallback(self, service_name: str, primary_func: Callable, *args, **kwargs) -> Any:
         """

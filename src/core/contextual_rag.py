@@ -18,8 +18,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-from core.stats_collector import StatsCollector
-from core.resilience_manager import resilience_manager
+from .stats_collector import StatsCollector
+from .resilience_manager import resilience_manager
 from utils.logger import logger
 
 

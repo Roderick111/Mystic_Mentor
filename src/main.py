@@ -18,11 +18,9 @@ from langchain.chat_models import init_chat_model
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.checkpoint.memory import MemorySaver
-import uuid
+from langgraph.checkpoint.sqlite import SqliteSaver
+import sqlite3
 import os
-import json
-from datetime import datetime
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
@@ -31,6 +29,8 @@ from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
 from utils.logger import logger, set_debug_mode
 from memory import MemoryManager
+from core.unified_session_manager import UnifiedSessionManager
+from utils.command_handler import command_handler
 
 load_dotenv()
 
@@ -47,126 +47,7 @@ rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)
 # Initialize memory manager with stats collector
 memory_manager = MemoryManager(llm, rag_system.stats_collector)
 
-class SessionManager:
-    """Simple session management for conversation tracking."""
-    
-    def __init__(self, sessions_dir: str = "data/sessions"):
-        self.sessions_dir = sessions_dir
-        os.makedirs(sessions_dir, exist_ok=True)
-        
-    def create_session(self) -> dict:
-        """Create a new session with UUID."""
-        session_id = str(uuid.uuid4())
-        session_metadata = {
-            "session_id": session_id,
-            "created_at": datetime.now().isoformat(),
-            "last_activity": datetime.now().isoformat(),
-            "message_count": 0,
-            "domains_used": [],
-            "memory_created": False
-        }
-        self._save_session_metadata(session_id, session_metadata)
-        print(f"🆔 New session created: {session_id[:8]}...")
-        return {
-            "session_id": session_id,
-            "session_metadata": session_metadata
-        }
-    
-    def load_session(self, session_id: str) -> dict:
-        """Load an existing session by ID."""
-        try:
-            session_path = self.get_session_path(session_id)
-            if os.path.exists(session_path):
-                with open(session_path, 'r') as f:
-                    session_metadata = json.load(f)
-                print(f"🆔 Loaded session: {session_id[:8]}...")
-                return {
-                    "session_id": session_id,
-                    "session_metadata": session_metadata
-                }
-            else:
-                print(f"❌ Session {session_id[:8]}... not found")
-                return None
-        except Exception as e:
-            logger.error(f"Failed to load session: {e}")
-            return None
-    
-    def session_exists(self, session_id: str) -> bool:
-        """Check if a session exists."""
-        try:
-            session_path = self.get_session_path(session_id)
-            return os.path.exists(session_path)
-        except Exception:
-            return False
-    
-    def find_session_by_partial_id(self, partial_id: str) -> str:
-        """Find a session by partial ID (first 8 characters)."""
-        try:
-            for filename in os.listdir(self.sessions_dir):
-                if filename.endswith('.json'):
-                    session_id = filename[:-5]  # Remove .json extension
-                    if session_id.startswith(partial_id):
-                        return session_id
-            return None
-        except Exception:
-            return None
-    
-    def get_session_path(self, session_id: str) -> str:
-        """Get the file path for a session."""
-        return os.path.join(self.sessions_dir, f"{session_id}.json")
-    
-    def _save_session_metadata(self, session_id: str, metadata: dict):
-        """Save session metadata to file."""
-        try:
-            session_path = self.get_session_path(session_id)
-            with open(session_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save session metadata: {e}")
-    
-    def update_session_activity(self, session_id: str, domains_used: list = None):
-        """Update session activity timestamp and metadata."""
-        try:
-            session_path = self.get_session_path(session_id)
-            if os.path.exists(session_path):
-                with open(session_path, 'r') as f:
-                    metadata = json.load(f)
-                
-                metadata["last_activity"] = datetime.now().isoformat()
-                metadata["message_count"] = metadata.get("message_count", 0) + 1
-                
-                if domains_used:
-                    current_domains = set(metadata.get("domains_used", []))
-                    current_domains.update(domains_used)
-                    metadata["domains_used"] = list(current_domains)
-                
-                self._save_session_metadata(session_id, metadata)
-        except Exception as e:
-            logger.error(f"Failed to update session activity: {e}")
-    
-    def list_sessions(self, limit: int = 10) -> list:
-        """List recent sessions."""
-        try:
-            session_files = []
-            for filename in os.listdir(self.sessions_dir):
-                if filename.endswith('.json'):
-                    session_path = os.path.join(self.sessions_dir, filename)
-                    try:
-                        with open(session_path, 'r') as f:
-                            metadata = json.load(f)
-                        session_files.append(metadata)
-                    except Exception:
-                        continue
-            
-            # Sort by last activity (newest first)
-            session_files.sort(key=lambda x: x.get("last_activity", ""), reverse=True)
-            return session_files[:limit]
-        except Exception as e:
-            logger.error(f"Failed to list sessions: {e}")
-            return []
-
-# Initialize session manager
-session_manager = SessionManager()
+# Session manager will be initialized after graph compilation
 
 class CombinedDecision(BaseModel):
     """Combined classification and RAG decision for optimal performance."""
@@ -185,9 +66,9 @@ class State(TypedDict):
     # Medium-term memory fields
     medium_term_summary: str | None
     context: dict[str, Any]  # For tracking summarization state
-    # Session tracking
-    session_id: str | None
-    session_metadata: dict[str, Any] | None
+    # Unified session and memory persistence
+    memory_settings: dict[str, Any]  # Memory toggle states
+    session_metadata: dict[str, Any]  # Session info (domains, counts, etc.)
 
 def classify_and_decide_rag(state: State):
     """Combined message classification and RAG decision for optimal performance."""
@@ -430,8 +311,10 @@ def logical_agent(state: State):
     """Logical teaching and explanation agent."""
     return create_agent_response(state, "logical")
 
-# Initialize checkpointer for session persistence
-checkpointer = MemorySaver()
+# Initialize persistent checkpointer for session and memory persistence
+db_path = "data/sessions/graph_checkpoints.db"
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
+checkpointer = SqliteSaver(sqlite3.connect(db_path, check_same_thread=False))
 
 # Build the agent graph
 graph_builder = StateGraph(State)
@@ -449,6 +332,9 @@ graph_builder.add_edge("logical", END)
 # Compile with checkpointer for session persistence
 graph = graph_builder.compile(checkpointer=checkpointer)
 
+# Initialize unified session manager with compiled graph and checkpointer
+session_manager = UnifiedSessionManager(checkpointer, graph)
+
 def print_stats():
     """Print comprehensive system statistics."""
     try:
@@ -463,125 +349,22 @@ def print_stats():
     except Exception as e:
         logger.error(f"Stats error: {e}")
 
+# Register dependencies with command handler (after all functions are defined)
+command_handler.register_dependencies(
+    rag_system=rag_system,
+    qa_cache=qa_cache,
+    memory_manager=memory_manager,
+    session_manager=session_manager,
+    print_stats=print_stats,
+    set_debug_mode=set_debug_mode
+)
+
 def handle_command(user_input: str, state: dict) -> bool:
-    """Handle system commands. Returns True if command was handled."""
-    try:
-        if user_input == "stats":
-            print_stats()
-            return True
-        elif user_input == "memory":
-            # Delegate memory status display to memory manager
-            memory_manager.display_memory_status(state)
-            return True
-        elif user_input == "cache clear":
-            rag_system.clear_caches()
-            return True
-        elif user_input == "cache stats clear":
-            rag_system.stats_collector.reset_query_stats()
-            logger.command_executed("Query statistics cleared")
-            return True
-        elif user_input == "qa cache clear":
-            qa_cache.clear_cache()
-            return True
-        elif user_input == "domains":
-            status = rag_system.get_domain_status()
-            active = ', '.join(status['active_domains']) if status['active_domains'] else 'None'
-            print(f"🎯 Active: {active}")
-            print(f"Available: {', '.join(status['available_domains'])}")
-            return True
-        elif user_input.startswith("domains enable "):
-            domain = user_input.replace("domains enable ", "").strip()
-            if rag_system.enable_domain(domain):
-                logger.command_executed(f"Domain '{domain}' enabled")
-            else:
-                logger.error(f"Failed to enable domain '{domain}'")
-            return True
-        elif user_input.startswith("domains disable "):
-            domain = user_input.replace("domains disable ", "").strip()
-            if rag_system.disable_domain(domain):
-                logger.command_executed(f"Domain '{domain}' disabled")
-            else:
-                logger.error(f"Failed to disable domain '{domain}'")
-            return True
-        elif user_input == "debug on":
-            set_debug_mode(True)
-            return True
-        elif user_input == "debug off":
-            set_debug_mode(False)
-            return True
-        elif user_input == "memory enable short":
-            memory_manager.enable_short_term()
-            return True
-        elif user_input == "memory disable short":
-            memory_manager.disable_short_term()
-            return True
-        elif user_input == "memory enable medium":
-            memory_manager.enable_medium_term()
-            return True
-        elif user_input == "memory disable medium":
-            memory_manager.disable_medium_term()
-            return True
-        elif user_input == "memory status":
-            # Use the same detailed display as "memory" command for consistency
-            memory_manager.display_memory_status(state)
-            return True
-        elif user_input.startswith("session change "):
-            session_input = user_input.replace("session change ", "").strip()
-            
-            if session_input == "new":
-                # Create new session and signal to restart
-                new_session_info = session_manager.create_session()
-                # Store in state to signal restart with new session
-                state["_new_session"] = new_session_info
-                return "restart_session"
-            else:
-                # Try to find session by partial ID
-                full_session_id = session_manager.find_session_by_partial_id(session_input)
-                if full_session_id:
-                    session_info = session_manager.load_session(full_session_id)
-                    if session_info:
-                        # Store in state to signal restart with existing session
-                        state["_new_session"] = session_info
-                        return "restart_session"
-                    else:
-                        print(f"❌ Failed to load session {session_input}")
-                        return True
-                else:
-                    print(f"❌ Session not found: {session_input}")
-                    print("💡 Use 'session list' to see available sessions")
-                    return True
-        elif user_input == "session list":
-            sessions = session_manager.list_sessions()
-            if sessions:
-                print("📋 Recent sessions:")
-                for i, session in enumerate(sessions[:5]):
-                    session_id = session['session_id'][:8]
-                    created = session.get('created_at', 'Unknown')[:19].replace('T', ' ')
-                    msg_count = session.get('message_count', 0)
-                    domains = ', '.join(session.get('domains_used', [])) or 'None'
-                    print(f"  {i+1}. {session_id}... ({created}) - {msg_count} msgs, domains: {domains}")
-            else:
-                print("📋 No sessions found")
-            return True
-        elif user_input == "session info":
-            session_id = state.get("session_id")
-            if session_id:
-                metadata = state.get("session_metadata", {})
-                print(f"🆔 Current Session: {session_id[:8]}...")
-                print(f"📅 Created: {metadata.get('created_at', 'Unknown')[:19].replace('T', ' ')}")
-                print(f"💬 Messages: {metadata.get('message_count', 0)}")
-                print(f"🎯 Domains used: {', '.join(metadata.get('domains_used', [])) or 'None'}")
-            else:
-                print("🆔 No active session")
-            return True
-        
-        return False
-    except Exception as e:
-        logger.error(f"Command failed: {e}")
-        return True
+    """Handle system commands using the new command handler."""
+    return command_handler.handle_command(user_input, state)
 
 def run_chatbot():
-    """Main chatbot loop with session management and clean command handling."""
+    """Main chatbot loop with unified session management."""
     
     def initialize_session(session_info=None):
         """Initialize or switch to a session."""
@@ -589,38 +372,20 @@ def run_chatbot():
             # Create a new session
             session_info = session_manager.create_session()
         
-        session_id = session_info["session_id"]
+        thread_id = session_info["thread_id"]
+        config = session_info["config"]
         
-        # Initialize state with session info
-        state = {
-            "messages": [], 
-            "message_type": None, 
-            "should_use_rag": None, 
-            "rag_context": None, 
-            "medium_term_summary": None, 
-            "context": {},
-            "session_id": session_id,
-            "session_metadata": session_info["session_metadata"]
-        }
+        # Initialize state 
+        state = session_info["state"].copy()
         
-        # LangGraph configuration for checkpointing
-        config = {"configurable": {"thread_id": session_id}}
+        # Restore memory settings for this session
+        session_manager.restore_memory_settings(memory_manager)
         
-        # Try to restore session state from checkpointer if switching to existing session
-        if session_info["session_metadata"].get("message_count", 0) > 0:
-            try:
-                # Get the current state from checkpointer
-                current_state = graph.get_state(config)
-                if current_state and current_state.values:
-                    print(f"🔄 Restoring conversation with {len(current_state.values.get('messages', []))} messages...")
-                    state.update(current_state.values)
-                    # Ensure session metadata is preserved
-                    state["session_id"] = session_id
-                    state["session_metadata"] = session_info["session_metadata"]
-                else:
-                    print(f"🆔 Switched to session {session_id[:8]}... (empty conversation)")
-            except Exception as e:
-                print(f"🆔 Switched to session {session_id[:8]}... (new conversation)")
+        # Try to restore conversation state if switching to existing session
+        if len(state.get("messages", [])) > 0:
+            logger.debug(f"Restoring conversation with {len(state.get('messages', []))} messages...")
+        else:
+            logger.debug(f"Switched to session {thread_id[:8]}... (empty conversation)")
         
         return state, config
     
@@ -644,7 +409,6 @@ def run_chatbot():
     print("🤖 Esoteric AI Agent")
     print("Commands: 'exit', 'stats', 'memory', 'domains', 'cache clear', 'debug on/off'")
     print("Memory: 'memory enable/disable short', 'memory enable/disable medium'")
-    print("Note: 'memory' and 'memory status' commands show the same detailed information")
     print("Domains: 'domains enable/disable <domain>'")
     print("Sessions: 'session list', 'session info', 'session change <id|new>'")
     print()
@@ -682,17 +446,14 @@ def run_chatbot():
             current_state.update(result)
             
             # Update session activity
-            session_id = current_state["session_id"]
             active_domains = rag_system.get_domain_status().get("active_domains", [])
-            session_manager.update_session_activity(session_id, active_domains)
+            session_manager.update_activity(active_domains)
             
-            # Update session metadata in state
-            if "session_metadata" in current_state:
-                current_state["session_metadata"]["message_count"] = current_state["session_metadata"].get("message_count", 0) + 1
-                if active_domains:
-                    current_domains = set(current_state["session_metadata"].get("domains_used", []))
-                    current_domains.update(active_domains)
-                    current_state["session_metadata"]["domains_used"] = list(current_domains)
+            # Update session metadata in state from session manager
+            current_session = session_manager.get_current_session()
+            if current_session:
+                current_state["session_metadata"] = current_session.get("session_metadata", {})
+                current_state["memory_settings"] = current_session.get("memory_settings", {})
             
             # Display response with cache indicators
             if current_state.get("messages") and len(current_state["messages"]) > 0:
