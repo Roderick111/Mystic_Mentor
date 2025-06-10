@@ -12,15 +12,6 @@ def start_api():
     print("🌙 Esoteric AI Agent - Web API Startup")
     print("=" * 50)
     
-    # Check for debug mode environment variable
-    debug_mode = os.getenv("DEBUG_MODE", "").lower() in ["true", "1", "on", "yes"]
-    if debug_mode:
-        print("🐛 Debug mode enabled via DEBUG_MODE environment variable")
-        # Import here to avoid circular imports
-        from src.utils.logger import set_debug_mode
-        set_debug_mode(True)
-        print("📝 Full logging notifications enabled")
-    
     # Check if we're in the right directory
     if not os.path.exists("src/web_api.py"):
         print("❌ Error: web_api.py not found in src/ directory")

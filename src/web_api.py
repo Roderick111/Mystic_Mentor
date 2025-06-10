@@ -113,35 +113,41 @@ class CommandResponse(BaseModel):
     message: str
     data: Optional[Dict[str, Any]] = None
 
-# Global session state management
-active_sessions: Dict[str, Dict[str, Any]] = {}
-
 def get_or_create_session(session_id: Optional[str] = None) -> tuple[str, Dict[str, Any]]:
-    """Get existing session or create new one"""
-    if session_id and session_id in active_sessions:
-        return session_id, active_sessions[session_id]
+    """Get existing session or create new one using UnifiedSessionManager"""
+    _, session_manager = get_graph_and_session_manager()
+    
+    if session_id:
+        # Try to load existing session
+        session_info = session_manager.load_session(session_id)
+        if session_info:
+            session_manager.current_thread_id = session_id
+            return session_id, {
+                "state": session_info["state"],
+                "config": session_info["config"],
+                "created_at": session_info["state"].get("session_metadata", {}).get("created_at"),
+                "last_activity": session_info["state"].get("session_metadata", {}).get("last_activity"),
+                "message_count": len(session_info["state"].get("messages", []))
+            }
     
     # Create new session using existing session manager
-    _, session_manager = get_graph_and_session_manager()
     session_info = session_manager.create_session()
     new_session_id = session_info["thread_id"]
     
-    # Store session state
-    active_sessions[new_session_id] = {
-        "state": session_info["state"].copy(),
+    return new_session_id, {
+        "state": session_info["state"],
         "config": session_info["config"],
-        "created_at": datetime.now(),
-        "last_activity": datetime.now(),
-        "message_count": 0
+        "created_at": session_info["state"].get("session_metadata", {}).get("created_at"),
+        "last_activity": session_info["state"].get("session_metadata", {}).get("last_activity"),
+        "message_count": len(session_info["state"].get("messages", []))
     }
-    
-    return new_session_id, active_sessions[new_session_id]
 
 def update_session_activity(session_id: str):
-    """Update session last activity timestamp"""
-    if session_id in active_sessions:
-        active_sessions[session_id]["last_activity"] = datetime.now()
-        active_sessions[session_id]["message_count"] += 1
+    """Update session last activity timestamp using UnifiedSessionManager"""
+    _, session_manager = get_graph_and_session_manager()
+    session_manager.current_thread_id = session_id
+    active_domains = rag_system.get_domain_status().get("active_domains", [])
+    session_manager.update_activity(active_domains)
 
 @app.get("/")
 async def root():
@@ -312,17 +318,27 @@ async def get_system_status():
 
 @app.get("/sessions", response_model=List[SessionInfo])
 async def list_sessions():
-    """List all active sessions"""
+    """List all active sessions using UnifiedSessionManager"""
     try:
+        _, session_manager = get_graph_and_session_manager()
+        sessions_list = session_manager.list_sessions(limit=20)
+        
         sessions = []
-        for session_id, session_data in active_sessions.items():
-            domains = rag_system.get_domain_status().get("active_domains", [])
+        for session in sessions_list:
+            # Parse datetime strings or use current time as fallback
+            try:
+                created_at = datetime.fromisoformat(session["created_at"]) if session["created_at"] != "unknown" else datetime.now()
+                last_activity = datetime.fromisoformat(session["last_activity"]) if session["last_activity"] != "unknown" else datetime.now()
+            except:
+                created_at = datetime.now()
+                last_activity = datetime.now()
+            
             sessions.append(SessionInfo(
-                session_id=session_id,
-                message_count=session_data["message_count"],
-                created_at=session_data["created_at"],
-                last_activity=session_data["last_activity"],
-                domains=domains
+                session_id=session["thread_id"],
+                message_count=session["message_count"],
+                created_at=created_at,
+                last_activity=last_activity,
+                domains=session.get("domains_used", [])
             ))
         return sessions
     except Exception as e:
@@ -331,13 +347,15 @@ async def list_sessions():
 
 @app.get("/sessions/{session_id}/history")
 async def get_session_history(session_id: str):
-    """Get chat history for a specific session"""
+    """Get chat history for a specific session using UnifiedSessionManager"""
     try:
-        if session_id not in active_sessions:
+        _, session_manager = get_graph_and_session_manager()
+        session_info = session_manager.load_session(session_id)
+        
+        if not session_info:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        session_data = active_sessions[session_id]
-        messages = session_data["state"].get("messages", [])
+        messages = session_info["state"].get("messages", [])
         
         # Convert messages to API format
         history = []
@@ -368,17 +386,10 @@ async def execute_command(request: CommandRequest):
         result = handle_command(request.command, current_state)
         
         if result == "restart_session":
-            # Handle session restart
+            # Handle session restart - new session is already created by UnifiedSessionManager
             new_session_info = current_state.get("_new_session")
             if new_session_info:
                 new_session_id = new_session_info["thread_id"]
-                active_sessions[new_session_id] = {
-                    "state": new_session_info["state"].copy(),
-                    "config": new_session_info["config"],
-                    "created_at": datetime.now(),
-                    "last_activity": datetime.now(),
-                    "message_count": 0
-                }
                 return CommandResponse(
                     success=True,
                     message="Session changed",

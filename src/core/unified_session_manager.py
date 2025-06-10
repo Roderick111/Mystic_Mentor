@@ -198,10 +198,11 @@ class UnifiedSessionManager:
     def list_sessions(self, limit: int = 10) -> List[Dict[str, Any]]:
         """List recent sessions using checkpointer."""
         try:
-            sessions = []
+            sessions_dict = {}
             
             # Get all checkpoints (threads) using the correct API
-            for checkpoint_tuple in self.checkpointer.list(None, limit=limit):
+            # Note: checkpointer.list() returns ALL checkpoints, including multiple per thread
+            for checkpoint_tuple in self.checkpointer.list(None, limit=limit*10):  # Get more to account for duplicates
                 if not checkpoint_tuple.config:
                     continue
                     
@@ -212,16 +213,31 @@ class UnifiedSessionManager:
                 # Extract metadata from the checkpoint tuple
                 metadata = checkpoint_tuple.checkpoint.get("channel_values", {}).get("session_metadata", {})
                 message_count = len(checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", []))
+                last_activity = metadata.get("last_activity", "unknown")
                 
-                sessions.append({
-                    "thread_id": thread_id,
-                    "created_at": metadata.get("created_at", "unknown"),
-                    "last_activity": metadata.get("last_activity", "unknown"),
-                    "message_count": message_count,
-                    "domains_used": metadata.get("domains_used", [])
-                })
+                # Only keep the most recent checkpoint for each thread_id (latest last_activity)
+                if thread_id not in sessions_dict:
+                    sessions_dict[thread_id] = {
+                        "thread_id": thread_id,
+                        "created_at": metadata.get("created_at", "unknown"),
+                        "last_activity": last_activity,
+                        "message_count": message_count,
+                        "domains_used": metadata.get("domains_used", [])
+                    }
+                else:
+                    # Keep the checkpoint with the most recent activity
+                    existing_activity = sessions_dict[thread_id]["last_activity"]
+                    if last_activity != "unknown" and (existing_activity == "unknown" or last_activity > existing_activity):
+                        sessions_dict[thread_id] = {
+                            "thread_id": thread_id,
+                            "created_at": metadata.get("created_at", "unknown"),
+                            "last_activity": last_activity,
+                            "message_count": message_count,
+                            "domains_used": metadata.get("domains_used", [])
+                        }
             
-            # Sort by last activity (newest first)
+            # Convert dict to list and sort by last activity (newest first)
+            sessions = list(sessions_dict.values())
             sessions.sort(key=lambda x: x.get("last_activity", ""), reverse=True)
             return sessions[:limit]
             
