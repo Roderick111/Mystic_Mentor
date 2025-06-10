@@ -185,6 +185,32 @@ class EsotericLogger:
         """Log when memory operations are skipped due to being disabled (debug mode only)."""
         if self.debug_mode:
             print(f"🧠 MEMORY SKIP: {memory_type} memory disabled, skipping {operation}")
+    
+    # Authentication-specific logging methods
+    def user_registered(self, username: str):
+        """Log user registration (always shown)."""
+        print(f"👤 User '{username}' registered successfully")
+    
+    def user_login(self, username: str):
+        """Log user login (always shown)."""
+        print(f"🔐 User '{username}' logged in")
+    
+    def user_logout(self, username: str):
+        """Log user logout (always shown)."""
+        print(f"👋 User '{username}' logged out")
+    
+    def user_deleted(self, username: str):
+        """Log user deletion (always shown)."""
+        print(f"🗑️ User '{username}' deleted")
+    
+    def auth_required(self, operation: str):
+        """Log authentication required messages (always shown)."""
+        print(f"🔒 Authentication required for: {operation}")
+    
+    def debug_auth(self, message: str):
+        """Log authentication debug messages (only in debug mode)."""
+        if self.debug_mode:
+            print(f"🔒 AUTH DEBUG: {message}")
 
 # Global logger instance
 logger = EsotericLogger()

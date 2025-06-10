@@ -1,0 +1,10 @@
+{
+  "dmedina": {
+    "username": "dmedina",
+    "password_hash": "3bba064aba3bb60a6a91635f1b68b55aa8a2ae92f1e08226abd9ba6955300804",
+    "salt": "33443b93aeaedc62fe371d36a7ff1b0c357e5e95bbaa668c3e9d8974fbe5a9c7",
+    "created_at": 1749574561.7187982,
+    "last_login": 1749574576.173536,
+    "is_active": true
+  }
+}

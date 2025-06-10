@@ -24,6 +24,7 @@ import os
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
+from core.auth_manager import AuthenticationManager
 from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
@@ -31,6 +32,7 @@ from utils.logger import logger, set_debug_mode
 from memory import MemoryManager
 from core.unified_session_manager import UnifiedSessionManager
 from utils.command_handler import command_handler
+from utils.lunar_calculator import get_current_lunar_phase
 
 load_dotenv()
 
@@ -46,6 +48,9 @@ rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)
 
 # Initialize memory manager with stats collector
 memory_manager = MemoryManager(llm, rag_system.stats_collector)
+
+# Initialize authentication manager
+auth_manager = AuthenticationManager()
 
 # Session manager will be initialized after graph compilation
 
@@ -86,14 +91,16 @@ Message types:
 
 Use RAG knowledge base if user:
 - Shares emotions/moods, asks for psychological support or help
-- Asks about esoteric topics: moon phases, astrology, spiritual practices, energy work, numerology, crystals, tarot, etc.
+- Asks about complex esoteric topics requiring detailed knowledge: astrology interpretations, spiritual practices, energy work, numerology calculations, crystal properties, tarot meanings, etc.
 - Asks about therapy or psychological concepts: IFS, Internal Family Systems, parts work, emotional healing, archetypes, shadow work etc.
 - Has unexplained emotional states (anxiety, restlessness, disconnection without clear cause)
-- Seeks guidance on spiritual timing or lunar influences
+- Seeks detailed guidance on spiritual timing or lunar influences
 
 Do NOT use RAG for:
 - Simple greetings or general conversation  
-- Non-esoteric and non-emotional topics (weather, cooking, geography)"""
+- Non-esoteric and non-emotional topics (weather, cooking, geography)
+- Current date, time, or basic lunar information queries (current moon phase, illumination percentage)
+- Simple factual questions that can be answered with built-in knowledge"""
         },
         {
             "role": "user",
@@ -243,6 +250,24 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     active_domains = rag_system.get_domain_status()["active_domains"]
     system_content += build_domain_guidance(active_domains, agent_type)
     
+    # Add current lunar information as native knowledge
+    try:
+        from utils.lunar_calculator import get_current_lunar_data
+        lunar_info = get_current_lunar_data()
+        
+        system_content += f"""
+
+## Your Native Lunar Knowledge 
+- Current Date: {lunar_info.date.strftime('%B %d, %Y')}
+- Moon Phase: {lunar_info.phase.value} 
+- Moon Illumination: {lunar_info.illumination_percentage:.1f}%
+- Days since New Moon: {lunar_info.days_from_new_moon:.1f}
+- Days to Full Moon: {lunar_info.days_to_full_moon:.1f}
+
+You naturally know this current lunar information. When asked about current date, moon phase, or illumination percentage, answer confidently from this knowledge."""
+    except Exception as e:
+        logger.debug(f"Could not fetch lunar information: {e}")
+    
     # Add memory context to system prompt
     memory_context = memory_manager.build_memory_context(state)
     if memory_context:
@@ -312,9 +337,10 @@ def logical_agent(state: State):
     return create_agent_response(state, "logical")
 
 # Initialize persistent checkpointer for session and memory persistence
-db_path = "data/sessions/graph_checkpoints.db"
-os.makedirs(os.path.dirname(db_path), exist_ok=True)
-checkpointer = SqliteSaver(sqlite3.connect(db_path, check_same_thread=False))
+# Note: Database path will be user-specific after authentication
+default_db_path = "data/sessions/graph_checkpoints.db"
+os.makedirs(os.path.dirname(default_db_path), exist_ok=True)
+checkpointer = SqliteSaver(sqlite3.connect(default_db_path, check_same_thread=False))
 
 # Build the agent graph
 graph_builder = StateGraph(State)
@@ -355,6 +381,7 @@ command_handler.register_dependencies(
     qa_cache=qa_cache,
     memory_manager=memory_manager,
     session_manager=session_manager,
+    auth_manager=auth_manager,
     print_stats=print_stats,
     set_debug_mode=set_debug_mode
 )
@@ -363,8 +390,64 @@ def handle_command(user_input: str, state: dict) -> bool:
     """Handle system commands using the new command handler."""
     return command_handler.handle_command(user_input, state)
 
+def authenticate_user():
+    """Handle user authentication before starting the system."""
+    print("🔐 Esoteric AI Agent - Authentication Required")
+    print("Commands: 'auth login', 'auth register', 'exit'")
+    print()
+    
+    while True:
+        try:
+            command = input("Auth> ").strip()
+            
+            if command == "exit":
+                print("Bye...")
+                return False
+            
+            # Handle auth commands
+            if command in ["auth login", "auth register"]:
+                result = command_handler.handle_command(command, {})
+                
+                # Check if authentication was successful
+                if auth_manager.is_authenticated():
+                    return True
+                    
+            elif command == "auth status":
+                command_handler.handle_command(command, {})
+            
+            elif command == "user list":
+                command_handler.handle_command(command, {})
+                
+            else:
+                print("❌ Unknown command. Available: 'auth login', 'auth register', 'user list', 'exit'")
+                
+        except KeyboardInterrupt:
+            print("\nBye...")
+            return False
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+
 def run_chatbot():
     """Main chatbot loop with unified session management."""
+    
+    # TEMPORARY: Skip authentication for development
+    # TODO: Re-enable authentication for production
+    # 
+    # To re-enable authentication, replace the code below with:
+    #   if not authenticate_user():
+    #       return
+    #   user_db_path = auth_manager.get_user_session_path()
+    #   checkpointer = SqliteSaver(sqlite3.connect(user_db_path, check_same_thread=False))
+    #   session_manager = UnifiedSessionManager(checkpointer, graph)
+    #   command_handler.session_manager = session_manager
+    #
+    print("🔧 Development Mode: Authentication temporarily disabled")
+    
+    # Use default session manager (already initialized)
+    global session_manager, checkpointer
+    
+    # Update command handler with session manager
+    command_handler.session_manager = session_manager
     
     def initialize_session(session_info=None):
         """Initialize or switch to a session."""
@@ -406,11 +489,12 @@ def run_chatbot():
     else:
         print("🎯 Active domains: None")
     
-    print("🤖 Esoteric AI Agent")
-    print("Commands: 'exit', 'stats', 'memory', 'domains', 'cache clear', 'debug on/off'")
+    print("🤖 Esoteric AI Agent - Development Mode")
+    print("Commands: 'exit', 'stats', 'memory', 'domains', 'cache clear', 'debug on/off', 'lunar'")
     print("Memory: 'memory enable/disable short', 'memory enable/disable medium'")
     print("Domains: 'domains enable/disable <domain>'")
     print("Sessions: 'session list', 'session info', 'session change <id|new>'")
+    print("Lunar: 'lunar' or 'moon' - Show current lunar phase information")
     print()
     
     while True:
