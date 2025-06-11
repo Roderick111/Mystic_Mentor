@@ -192,7 +192,7 @@ def build_domain_guidance(active_domains: list, agent_type: str) -> str:
     domain_guidance = {
         "emotional": {
             "lunar": "- Consider lunar phases and cosmic timing in your guidance",
-            "numerology": "- Incorporate numerological insights when relevant", 
+            "numerology": "- Incorporate numerological insights when relevant, remember about master numbers", 
             "ifs": "- Apply Internal Family Systems (IFS) therapy and psychological healing techniques",
             "astrology": "- Reference astrological influences and planetary energies",
             "crystals": "- Suggest crystal healing and energy work when appropriate",
@@ -201,7 +201,7 @@ def build_domain_guidance(active_domains: list, agent_type: str) -> str:
         },
         "logical": {
             "lunar": "- Explain lunar cycles, moon phases, and cosmic timing with scientific and mystical perspectives",
-            "numerology": "- Break down numerological principles and their practical applications",
+            "numerology": "- Break down numerological principles and their practical applications, remember about master numbers",
             "ifs": "- Teach Internal Family Systems (IFS) concepts, parts work, and psychological integration", 
             "astrology": "- Teach astrological concepts with systematic clarity and practical relevance",
             "crystals": "- Explain crystal properties, formations, and energy work methodically",
@@ -257,33 +257,7 @@ Be precise yet accessible. Share only the most relevant knowledge that directly 
     active_domains = rag_system.get_domain_status()["active_domains"]
     system_content += build_domain_guidance(active_domains, agent_type)
     
-    # Add current lunar information as native knowledge
-    try:
-        from utils.lunar_calculator import get_current_lunar_data
-        lunar_info = get_current_lunar_data()
-        
-        system_content += f"""
-
-## Your Native Lunar Knowledge 
-- Current Date: {lunar_info.date.strftime('%B %d, %Y')}
-- Moon Phase: {lunar_info.phase.value} 
-- Moon Illumination: {lunar_info.illumination_percentage:.1f}%
-- Days since New Moon: {lunar_info.days_from_new_moon:.1f}
-- Days to Full Moon: {lunar_info.days_to_full_moon:.1f}
-
-You naturally know this current lunar information. When asked about current date, moon phase, or illumination percentage, answer confidently from this knowledge. Use only when relevant."""
-    except Exception as e:
-        logger.debug(f"Could not fetch lunar information: {e}")
-    
-    # Add memory context to system prompt
-    memory_context = memory_manager.build_memory_context(state)
-    if memory_context:
-        system_content += f"\n\n## Conversation Memory\n{memory_context}\n\nUse this memory context to provide continuity and personalized responses."
-    
-    rag_context = rag_result["content"]
-    rag_type = rag_result["type"]
-    
-    # Check for domain activation suggestions
+    # Check for domain activation suggestions EARLY in context
     if semantic_detector.is_available():
         try:
             suggestion_result = semantic_detector.get_domain_suggestions(last_message.content, active_domains)
@@ -300,12 +274,36 @@ You naturally know this current lunar information. When asked about current date
                 }
                 domain_display_name = domain_display_names.get(detected_domain, detected_domain.title())
                 
-                suggestion_message = f"\n\n💡 I notice your question relates to {domain_display_name}. Would you like me to enable this knowledge domain for more detailed guidance? (Type 'domains enable {detected_domain}' to activate)"
-                
                 # Add suggestion to system content for context
-                system_content += f"\n\nNote: The user's question relates to {domain_display_name} domain which is currently inactive. Provide a helpful response with available knowledge and mention the domain activation option."
+                system_content += f"\n\nIMPORTANT: The user's question relates to {domain_display_name} domain which is currently inactive. Explicitly tell about your limitations in the intro. Provide a helpful relevant response with available knowledge. Mention at the end that the domain can be enabled in settings."
         except Exception as e:
             logger.debug(f"Domain suggestion error: {e}")
+    
+    # Add current lunar information as native knowledge
+    try:
+        from utils.lunar_calculator import get_current_lunar_data
+        lunar_info = get_current_lunar_data()
+        
+        system_content += f"""
+
+## Your Native Lunar Knowledge 
+- Current Date: {lunar_info.date.strftime('%B %d, %Y')}
+- Moon Phase: {lunar_info.phase.value} 
+- Moon Illumination: {lunar_info.illumination_percentage:.1f}%
+- Days since New Moon: {lunar_info.days_from_new_moon:.1f}
+- Days to Full Moon: {lunar_info.days_to_full_moon:.1f}
+
+You naturally know this current lunar information. When asked about current date, moon phase, or illumination percentage, answer confidently from this knowledge. Use only when relevant or asked."""
+    except Exception as e:
+        logger.debug(f"Could not fetch lunar information: {e}")
+    
+    # Add memory context to system prompt
+    memory_context = memory_manager.build_memory_context(state)
+    if memory_context:
+        system_content += f"\n\n## Conversation Memory\n{memory_context}\n\nUse this memory context to provide continuity and personalized responses."
+    
+    rag_context = rag_result["content"]
+    rag_type = rag_result["type"]
     
     # Handle different types of RAG responses
     if rag_type == "domain_blocked":

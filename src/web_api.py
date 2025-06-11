@@ -130,8 +130,11 @@ def get_or_create_session(session_id: Optional[str] = None) -> tuple[str, Dict[s
                 "last_activity": session_info["state"].get("session_metadata", {}).get("last_activity"),
                 "message_count": len(session_info["state"].get("messages", []))
             }
+        else:
+            # Session ID provided but not found - raise error
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
-    # Create new session using existing session manager
+    # Create new session only when explicitly requested (first message)
     session_info = session_manager.create_session()
     new_session_id = session_info["thread_id"]
     
@@ -420,6 +423,56 @@ async def archive_session(session_id: str):
     except Exception as e:
         web_logger.error(f"Session archive error: {e}")
         raise HTTPException(status_code=500, detail="Error archiving session")
+
+@app.get("/sessions/archived", response_model=List[SessionInfo])
+async def list_archived_sessions():
+    """List all archived sessions"""
+    try:
+        _, session_manager = get_graph_and_session_manager()
+        sessions_list = session_manager.list_archived_sessions(limit=50)
+        
+        sessions = []
+        for session in sessions_list:
+            # Parse datetime strings or use current time as fallback
+            try:
+                created_at = datetime.fromisoformat(session["created_at"]) if session["created_at"] != "unknown" else datetime.now()
+                last_activity = datetime.fromisoformat(session["last_activity"]) if session["last_activity"] != "unknown" else datetime.now()
+            except:
+                created_at = datetime.now()
+                last_activity = datetime.now()
+            
+            sessions.append(SessionInfo(
+                session_id=session["thread_id"],
+                title=session.get("title"),
+                message_count=session["message_count"],
+                created_at=created_at,
+                last_activity=last_activity,
+                domains=session.get("domains_used", [])
+            ))
+        return sessions
+    except Exception as e:
+        web_logger.error(f"Archived sessions listing error: {e}")
+        raise HTTPException(status_code=500, detail="Error listing archived sessions")
+
+@app.post("/sessions/{session_id}/unarchive")
+async def unarchive_session(session_id: str):
+    """Unarchive a session (restore to main list)"""
+    try:
+        _, session_manager = get_graph_and_session_manager()
+        
+        # Unarchive session in the database
+        success = session_manager.unarchive_session(session_id)
+        
+        if success:
+            return {"success": True, "message": "Session restored"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        web_logger.error(f"Session unarchive error: {e}")
+        raise HTTPException(status_code=500, detail="Error restoring session")
 
 @app.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):

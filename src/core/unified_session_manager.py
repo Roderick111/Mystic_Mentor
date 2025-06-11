@@ -351,4 +351,84 @@ class UnifiedSessionManager:
             
         except Exception as e:
             logger.error(f"Failed to archive session: {e}")
-            return False 
+            return False
+
+    def unarchive_session(self, thread_id: str) -> bool:
+        """Unarchive a session by removing the archived flag."""
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        try:
+            # Get current state
+            current_state = self.graph.get_state(config)
+            if not current_state or not current_state.values:
+                return False
+            
+            # Update metadata to remove archived flag
+            metadata = current_state.values.get("session_metadata", {})
+            metadata["archived"] = False
+            metadata["unarchived_at"] = datetime.now().isoformat()
+            metadata["last_activity"] = datetime.now().isoformat()
+            
+            # Update state
+            self.graph.update_state(config, {"session_metadata": metadata})
+            logger.debug(f"Unarchived session {thread_id[:8]}...")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to unarchive session: {e}")
+            return False
+
+    def list_archived_sessions(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """List archived sessions using checkpointer."""
+        try:
+            sessions_dict = {}
+            
+            # Get all checkpoints (threads) using the correct API
+            for checkpoint_tuple in self.checkpointer.list(None, limit=limit*10):  # Get more to account for duplicates
+                if not checkpoint_tuple.config:
+                    continue
+                    
+                thread_id = checkpoint_tuple.config.get("configurable", {}).get("thread_id")
+                if not thread_id:
+                    continue
+                
+                # Extract metadata from the checkpoint tuple
+                metadata = checkpoint_tuple.checkpoint.get("channel_values", {}).get("session_metadata", {})
+                message_count = len(checkpoint_tuple.checkpoint.get("channel_values", {}).get("messages", []))
+                last_activity = metadata.get("last_activity", "unknown")
+                
+                # Only keep the most recent checkpoint for each thread_id (latest last_activity)
+                if thread_id not in sessions_dict:
+                    sessions_dict[thread_id] = {
+                        "thread_id": thread_id,
+                        "title": metadata.get("title"),
+                        "created_at": metadata.get("created_at", "unknown"),
+                        "last_activity": last_activity,
+                        "message_count": message_count,
+                        "domains_used": metadata.get("domains_used", []),
+                        "archived": metadata.get("archived", False),
+                        "archived_at": metadata.get("archived_at", "unknown")
+                    }
+                else:
+                    # Keep the checkpoint with the most recent activity
+                    existing_activity = sessions_dict[thread_id]["last_activity"]
+                    if last_activity != "unknown" and (existing_activity == "unknown" or last_activity > existing_activity):
+                        sessions_dict[thread_id] = {
+                            "thread_id": thread_id,
+                            "title": metadata.get("title"),
+                            "created_at": metadata.get("created_at", "unknown"),
+                            "last_activity": last_activity,
+                            "message_count": message_count,
+                            "domains_used": metadata.get("domains_used", []),
+                            "archived": metadata.get("archived", False),
+                            "archived_at": metadata.get("archived_at", "unknown")
+                        }
+            
+            # Convert dict to list, filter to only archived sessions, and sort by archived date (newest first)
+            archived_sessions = [s for s in sessions_dict.values() if s.get("archived", False)]
+            archived_sessions.sort(key=lambda x: x.get("archived_at", ""), reverse=True)
+            return archived_sessions[:limit]
+            
+        except Exception as e:
+            logger.error(f"Failed to list archived sessions: {e}")
+            return [] 

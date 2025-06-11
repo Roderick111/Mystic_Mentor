@@ -1,20 +1,33 @@
-import ConversationStarters from './ConversationStarters.js';
-
-function ChatArea({ 
-    messages, 
-    isLoading, 
-    inputValue, 
-    setInputValue, 
-    onSubmit, 
+/**
+ * ChatArea.js - Main Chat Interface
+ * Purpose: Displays message history, handles user input, and shows conversation starters.
+ * Manages chat flow with loading states, auto-scroll, and suggestion integration.
+ */
+const ChatArea = ({
+    messages,
+    isLoading,
+    inputValue,
+    setInputValue,
+    onSendMessage,
     messagesEndRef,
+    inputRef,
+    // Conversation starters props
     systemStatus,
-    showSuggestions,
-    onDismissSuggestions,
-    onSuggestionClick,
+    isNewSession,
+    suggestionsDismissed,
     selectedSuggestion,
-    currentSuggestions,
-    isNewSession
-}) {
+    onSuggestionClick,
+    onDismissSuggestions
+}) => {
+    // Handle form submission
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSendMessage(inputValue);
+    };
+
+    // Show suggestions for new sessions unless manually dismissed
+    const showSuggestions = isNewSession && !suggestionsDismissed;
+
     return (
         <>
             {/* Chat Messages */}
@@ -32,15 +45,16 @@ function ChatArea({
                                 {isNewSession ? "What wisdom do you seek from the universe?" : "Continue your spiritual journey with your Esoteric Agent"}
                             </p>
                             
-                            <ConversationStarters
-                                systemStatus={systemStatus}
-                                showSuggestions={showSuggestions}
-                                onDismiss={onDismissSuggestions}
-                                onSuggestionClick={onSuggestionClick}
-                                selectedSuggestion={selectedSuggestion}
-                                isLoading={isLoading}
-                                currentSuggestions={currentSuggestions}
-                            />
+                            {/* Suggested prompts for new sessions */}
+                            {showSuggestions && (
+                                <ConversationStarters 
+                                    systemStatus={systemStatus}
+                                    isLoading={isLoading}
+                                    onSuggestionClick={onSuggestionClick}
+                                    onDismiss={onDismissSuggestions}
+                                    selectedSuggestion={selectedSuggestion}
+                                />
+                            )}
                         </div>
                     ) : (
                         messages.map((message, index) => (
@@ -90,12 +104,13 @@ function ChatArea({
             {/* Input Area */}
             <div className="border-t border-gray-700 p-4">
                 <div className="max-w-4xl mx-auto">
-                    <form onSubmit={onSubmit} className="flex space-x-4">
+                    <form onSubmit={handleSubmit} className="flex space-x-4">
                         <input
+                            ref={inputRef}
                             type="text"
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
-                            placeholder={isNewSession && showSuggestions ? "Ask about lunar wisdom, life guidance, or spiritual insights..." : "Message Esoteric Agent..."}
+                            placeholder={isNewSession && !suggestionsDismissed ? "Ask about lunar wisdom, life guidance, or spiritual insights..." : "Message Esoteric Agent..."}
                             className="flex-1 bg-gray-800 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
                             disabled={isLoading}
                         />
@@ -113,6 +128,7 @@ function ChatArea({
             </div>
         </>
     );
-}
+};
 
-export default ChatArea; 
+// Export for use in other components
+window.ChatArea = ChatArea; 
