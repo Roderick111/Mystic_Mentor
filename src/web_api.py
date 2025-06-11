@@ -39,8 +39,8 @@ web_logger = logging.getLogger("esoteric_web_api")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Esoteric AI Agent API",
-    description="A wise shaman offering emotional healing and esoteric knowledge through AI",
+    title="Mystic Mentor API",
+    description="Your Personal Mentor for Navigating Your Spiritual Path",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc"
@@ -157,7 +157,7 @@ def update_session_activity(session_id: str):
 async def root():
     """Root endpoint - API status"""
     return {
-        "message": "Esoteric AI Agent API",
+        "message": "Mystic Mentor API",
         "status": "active",
         "version": "1.0.0",
         "docs": "/docs"
@@ -190,9 +190,9 @@ async def robots_txt():
 async def manifest_json():
     """Web app manifest for PWA"""
     return {
-        "name": "Esoteric AI Agent",
-        "short_name": "EsotericAI",
-        "description": "A wise shaman offering emotional healing and esoteric knowledge through AI",
+        "name": "Mystic Mentor",
+        "short_name": "MysticMentor",
+        "description": "Your Personal Mentor for Navigating Your Spiritual Path",
         "start_url": "/",
         "display": "standalone",
         "background_color": "#1a1a1a",

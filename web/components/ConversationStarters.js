@@ -49,6 +49,18 @@ const ConversationStarters = ({
             "How do I know if a crystal is right for me?",
             "What crystals support chakra balancing?",
             "How can I create a crystal grid for my intentions?"
+        ],
+        personal: [
+            "I'm feeling lost and need guidance on my life direction",
+            "Help me understand why I keep attracting the same relationship patterns",
+            "I'm going through a difficult transition and need spiritual support",
+            "I feel stuck emotionally and don't know how to heal",
+            "What is my soul trying to teach me through recent challenges?",
+            "I'm struggling with self-doubt - how can I find my inner strength?",
+            "Help me release old wounds that are holding me back",
+            "I need clarity about a major life decision I'm facing",
+            "How can I better trust my intuition in daily life?",
+            "I'm feeling disconnected from my purpose - guide me back"
         ]
     };
 
@@ -62,19 +74,26 @@ const ConversationStarters = ({
         return shuffled;
     };
 
-    // Get 4 random suggestions from the active domain
+    // Get 4 suggestions: 1 from active domain + 2 from personal + 1 from active domain
     const getConversationSuggestions = () => {
         if (!systemStatus?.active_domains?.length) {
-            // Fallback to lunar if no active domains
-            return shuffleArray(conversationStarters.lunar).slice(0, 4);
+            // Fallback to lunar + personal if no active domains
+            const lunarQuestions = shuffleArray(conversationStarters.lunar).slice(0, 2);
+            const personalQuestions = shuffleArray(conversationStarters.personal).slice(0, 2);
+            return [...lunarQuestions, ...personalQuestions];
         }
         
         // Get the first active domain (since we're in single domain mode)
         const activeDomain = systemStatus.active_domains[0];
         const domainQuestions = conversationStarters[activeDomain] || conversationStarters.lunar;
+        const personalQuestions = conversationStarters.personal;
         
-        // Return 4 randomly selected questions
-        return shuffleArray(domainQuestions).slice(0, 4);
+        // Get 1 random domain question and 2 random personal questions
+        const selectedDomainQuestions = shuffleArray(domainQuestions).slice(0, 2);
+        const selectedPersonalQuestions = shuffleArray(personalQuestions).slice(0, 2);
+        
+        // Combine and return 4 total questions
+        return [...selectedDomainQuestions, ...selectedPersonalQuestions];
     };
 
     // Regenerate suggestions when domain changes
@@ -102,7 +121,7 @@ const ConversationStarters = ({
     }, [systemStatus?.active_domains, currentSuggestions.length]);
 
     return (
-        <div className="mt-6 space-y-3">
+        <div className="mt-10 space-y-3">
             <div className="flex items-center justify-between max-w-lg mx-auto mb-3">
                 <p className="text-sm text-gray-400">
                     Try asking about {systemStatus?.active_domains?.[0] || 'spiritual guidance'}:
@@ -144,9 +163,6 @@ const ConversationStarters = ({
                     ))
                 )}
             </div>
-            <p className="text-xs text-gray-500 text-center mt-2 opacity-75">
-                Questions change with each domain switch and new session
-            </p>
         </div>
     );
 };

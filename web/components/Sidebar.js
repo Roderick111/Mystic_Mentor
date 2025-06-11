@@ -16,6 +16,8 @@ const Sidebar = ({
     onArchiveSession,
     onDeleteSession
 }) => {
+    // TODO: Re-enable archive feature when multi-user authentication is implemented
+    const ARCHIVE_FEATURE_ENABLED = false;
     // Session management state
     const [showAllSessions, setShowAllSessions] = React.useState(false);
     const [sessionSearch, setSessionSearch] = React.useState('');
@@ -151,19 +153,21 @@ const Sidebar = ({
                                                     </svg>
                                                     <span>Rename</span>
                                                 </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onArchiveSession(session.session_id);
-                                                        setShowSessionMenu(null);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 flex items-center space-x-2"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
-                                                    </svg>
-                                                    <span>Archive</span>
-                                                </button>
+                                                {ARCHIVE_FEATURE_ENABLED && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onArchiveSession(session.session_id);
+                                                            setShowSessionMenu(null);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 flex items-center space-x-2"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
+                                                        </svg>
+                                                        <span>Archive</span>
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
@@ -190,14 +194,18 @@ const Sidebar = ({
     );
 
     return (
-        <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-gray-800 flex flex-col overflow-hidden border-r border-gray-700`}>
+        <div className={`${sidebarOpen ? 'w-80' : 'w-0'} transition-all duration-300 bg-transparent flex flex-col overflow-hidden border-r border-gray-700`}>
             {/* Sidebar Header */}
-            <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+            <div className="h-16 px-4 border-b border-gray-700 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">EA</span>
+                    <div className="w-12 h-12 flex items-center justify-center">
+                        <img 
+                            src="logos/colorful_logo.svg" 
+                            alt="Mystic Mentor Logo" 
+                            className="w-12 h-12 object-contain"
+                        />
                     </div>
-                    <span className="font-semibold">Esoteric Agent</span>
+                    <span className="font-semibold">Mystic Mentor</span>
                 </div>
                 <button
                     onClick={() => setSidebarOpen(false)}
@@ -210,34 +218,37 @@ const Sidebar = ({
                 </button>
             </div>
 
-            {/* New Chat Button */}
-            <div className="p-4">
-                <button
-                    onClick={onCreateNewSession}
-                    className="w-full bg-gray-700 hover:bg-gray-600 text-white py-3 px-4 rounded-lg flex items-center justify-center space-x-2 transition-colors"
-                >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span>New Session</span>
-                </button>
-            </div>
-
             {/* Recent Sessions */}
             <div className="flex-1 overflow-y-auto px-4">
-                <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold text-gray-400">Recent Sessions</h3>
-                </div>
-                    
-                {/* Search Input */}
-                <div className="mb-3">
-                    <input
-                        type="text"
-                        placeholder="Search sessions..."
-                        value={sessionSearch}
-                        onChange={(e) => setSessionSearch(e.target.value)}
-                        className="w-full bg-gray-700 text-white text-sm px-3 py-2 rounded border border-gray-600 focus:outline-none focus:border-blue-500"
-                    />
+                <div className="pt-4 mb-3">
+                    {/* Search Input - Minimalistic */}
+                    <div className="relative group mb-3">
+                        <div className="flex items-center p-2 rounded hover:bg-gray-700 transition-colors">
+                            <svg className="w-4 h-4 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <input
+                                type="text"
+                                placeholder="Search sessions..."
+                                value={sessionSearch}
+                                onChange={(e) => setSessionSearch(e.target.value)}
+                                className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-400 border-none outline-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* New Session Button - Minimalistic */}
+                    <button
+                        onClick={onCreateNewSession}
+                        className="w-full flex items-center p-2 rounded text-sm text-gray-100 hover:bg-gray-700 transition-colors mb-4"
+                    >
+                        <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span>New Session</span>
+                    </button>
+
+                    <h3 className="text-sm font-semibold text-gray-400 mb-3">Recent Sessions</h3>
                 </div>
 
                 {/* Sessions List */}

@@ -1,8 +1,99 @@
 /**
- * ChatArea.js - Main Chat Interface
+ * ChatArea.js - Main Chat Interface (Lightweight Version)
  * Purpose: Displays message history, handles user input, and shows conversation starters.
  * Manages chat flow with loading states, auto-scroll, and suggestion integration.
  */
+
+// Simple Markdown renderer for agent messages
+const MessageContent = ({ content }) => {
+    // Process markdown with proper list handling
+    const processMarkdown = (text) => {
+        // Split into lines for better processing
+        const lines = text.split('\n');
+        const processed = [];
+        let inList = false;
+        let listType = null;
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i];
+            
+            // Handle headers
+            if (line.startsWith('### ')) {
+                if (inList) {
+                    processed.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    inList = false;
+                }
+                processed.push(`<h3 class="text-lg font-semibold mt-0 mb-0 pt-2 text-white">${line.substring(4)}</h3>`);
+            } else if (line.startsWith('## ')) {
+                if (inList) {
+                    processed.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    inList = false;
+                }
+                processed.push(`<h2 class="text-xl font-bold mt-2 mb-0 pt-3 text-white">${line.substring(3)}</h2>`);
+            }
+            // Handle bullet points
+            else if (line.match(/^[•\-\*] /)) {
+                if (!inList || listType !== 'ul') {
+                    if (inList) processed.push('</ol>');
+                    processed.push('<ul class="list-disc mt-0 ml-6 mb-6">');
+                    inList = true;
+                    listType = 'ul';
+                }
+                const content = line.substring(2).trim();
+                processed.push(`<li class="mb-2">${content}</li>`);
+            }
+            // Handle numbered lists
+            else if (line.match(/^\d+\. /)) {
+                if (!inList || listType !== 'ol') {
+                    if (inList) processed.push('</ul>');
+                    processed.push('<ol class="list-decimal mt-0 ml-6 mb-6">');
+                    inList = true;
+                    listType = 'ol';
+                }
+                const content = line.replace(/^\d+\. /, '');
+                processed.push(`<li class="mb-2">${content}</li>`);
+            }
+            // Regular text
+            else {
+                if (inList && line.trim() === '') {
+                    // Keep empty lines in lists
+                    continue;
+                } else if (inList && line.trim() !== '') {
+                    // Close list if we hit non-list content
+                    processed.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    inList = false;
+                    listType = null;
+                }
+                
+                if (line.trim() === '') {
+                    processed.push('<br>');
+                } else {
+                    // Process inline formatting
+                    line = line
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+                        .replace(/\*(.*?)\*/g, '<em class="italic text-gray-300">$1</em>');
+                    processed.push(`<p class="mb-1 pb-1">${line}</p>`);
+                }
+            }
+        }
+
+        // Close any open lists
+        if (inList) {
+            processed.push(listType === 'ul' ? '</ul>' : '</ol>');
+        }
+
+        return processed.join('');
+    };
+
+    const processedContent = processMarkdown(content);
+
+    return (
+        <div 
+            className="max-w-none leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: processedContent }}
+        />
+    );
+};
 const ChatArea = ({
     messages,
     isLoading,
@@ -17,12 +108,21 @@ const ChatArea = ({
     suggestionsDismissed,
     selectedSuggestion,
     onSuggestionClick,
-    onDismissSuggestions
+    onDismissSuggestions,
+    // Message actions
+    onMessageAction
 }) => {
     // Handle form submission
     const handleSubmit = (e) => {
         e.preventDefault();
         onSendMessage(inputValue);
+    };
+
+    // Handle message actions
+    const handleMessageAction = (action, messageIndex) => {
+        if (onMessageAction) {
+            onMessageAction(action, messageIndex, messages[messageIndex]);
+        }
     };
 
     // Show suggestions for new sessions unless manually dismissed
@@ -31,18 +131,15 @@ const ChatArea = ({
     return (
         <>
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 pt-20">
                 <div className="max-w-4xl mx-auto space-y-6">
                     {messages.length === 0 ? (
                         <div className="text-center text-gray-400 mt-20">
-                            <div className="w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <span className="text-white font-bold text-xl">EA</span>
-                            </div>
-                            <h2 className="text-2xl font-semibold mb-2">
-                                {isNewSession ? "Welcome, seeker. I am your guide through the mysteries of the cosmos." : "How can I help you today?"}
+                            <h2 className="text-2xl font-semibold mb-2 text-gray-300">
+                                {isNewSession ? "Your Personal Mentor for Navigating Your Spiritual Path" : "How can I help you today?"}
                             </h2>
-                            <p className="text-gray-500">
-                                {isNewSession ? "What wisdom do you seek from the universe?" : "Continue your spiritual journey with your Esoteric Agent"}
+                            <p className="text-gray-400">
+                                {isNewSession ? "Get guidance, healing, and clarity for life's deepest questions" : "Continue your spiritual journey with your Mystic Mentor"}
                             </p>
                             
                             {/* Suggested prompts for new sessions */}
@@ -59,23 +156,26 @@ const ChatArea = ({
                     ) : (
                         messages.map((message, index) => (
                             <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`flex space-x-3 max-w-3xl ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                        message.role === 'user' 
-                                            ? 'bg-blue-600' 
-                                            : 'bg-gradient-to-r from-purple-500 to-blue-500'
-                                    }`}>
-                                        <span className="text-white font-bold text-sm">
-                                            {message.role === 'user' ? 'U' : 'EA'}
-                                        </span>
-                                    </div>
-                                    <div className={`p-4 rounded-lg ${
-                                        message.role === 'user' 
-                                            ? 'bg-blue-600 text-white' 
-                                            : 'bg-gray-800 text-gray-100'
-                                    }`}>
-                                        <div className="whitespace-pre-wrap">{message.content}</div>
-                                    </div>
+                                <div className={`${
+                                    message.role === 'user' 
+                                        ? 'max-w-lg bg-blue-600 text-white p-4 rounded-lg ml-12' 
+                                        : 'max-w-4xl text-gray-100 mr-12 group relative'
+                                }`}>
+                                    {message.role === 'user' ? (
+                                        <div className="text-left">{message.content}</div>
+                                    ) : (
+                                        <div className="relative">
+                                            <MessageContent content={message.content} />
+                                            {/* Message Actions - appears on hover at bottom left */}
+                                            <div className="absolute -bottom-6 left-0">
+                                                <MessageActions 
+                                                    message={message}
+                                                    messageIndex={index}
+                                                    onAction={handleMessageAction}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))
@@ -83,16 +183,11 @@ const ChatArea = ({
                     
                     {isLoading && (
                         <div className="flex justify-start">
-                            <div className="flex space-x-3 max-w-3xl">
-                                <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                                    <span className="text-white font-bold text-sm">EA</span>
-                                </div>
-                                <div className="bg-gray-800 p-4 rounded-lg">
-                                    <div className="flex space-x-1">
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                                        <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
-                                    </div>
+                            <div className="max-w-4xl text-gray-100 mr-12">
+                                <div className="flex space-x-1">
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
                                 </div>
                             </div>
                         </div>
@@ -110,7 +205,7 @@ const ChatArea = ({
                             type="text"
                             value={inputValue}
                             onChange={(e) => setInputValue(e.target.value)}
-                            placeholder={isNewSession && !suggestionsDismissed ? "Ask about lunar wisdom, life guidance, or spiritual insights..." : "Message Esoteric Agent..."}
+                            placeholder={isNewSession && !suggestionsDismissed ? "Ask about lunar wisdom, life guidance, or spiritual insights..." : "Message Mystic Mentor..."}
                             className="flex-1 bg-gray-800 text-white border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
                             disabled={isLoading}
                         />

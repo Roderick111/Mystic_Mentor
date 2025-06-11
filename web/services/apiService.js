@@ -154,6 +154,16 @@ class ApiService {
             throw error;
         }
     }
+
+    // Lunar API
+    async fetchLunarInfo() {
+        try {
+            return await this.makeRequest('/lunar');
+        } catch (error) {
+            console.error('Error fetching lunar information:', error);
+            throw error;
+        }
+    }
 }
 
 // Create a default instance for easy importing

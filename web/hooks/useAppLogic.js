@@ -3,6 +3,8 @@
  * Purpose: Contains ALL application state, side effects, and business functions.
  * Provides clean interface to App component for complete separation of concerns.
  */
+const { useState, useEffect, useRef } = React;
+
 const useAppLogic = () => {
     // State management
     const [messages, setMessages] = useState([]);
@@ -68,9 +70,12 @@ const useAppLogic = () => {
         }
     }, [currentSessionId]); // Reset when session changes
 
-    // Scroll to bottom of messages
+    // Scroll to bottom of messages - always instant
     const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        const chatContainer = messagesEndRef.current?.closest('.overflow-y-auto');
+        if (chatContainer) {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
     };
 
     useEffect(() => {
@@ -265,6 +270,44 @@ const useAppLogic = () => {
         }
     };
 
+    // Handle message actions (copy, regenerate, bookmark, like, dislike)
+    const handleMessageAction = async (action, messageIndex, message) => {
+        console.log(`Message action: ${action} on message ${messageIndex}`);
+        
+        switch (action) {
+            case 'regenerate':
+                if (messageIndex > 0) {
+                    // Get the user message that prompted this response
+                    const userMessage = messages[messageIndex - 1];
+                    if (userMessage && userMessage.role === 'user') {
+                        // Remove messages from this point forward and regenerate
+                        const messagesToKeep = messages.slice(0, messageIndex);
+                        setMessages(messagesToKeep);
+                        await sendMessage(userMessage.content);
+                    }
+                }
+                break;
+                
+            case 'bookmark':
+                // TODO: Implement bookmark functionality
+                console.log('Bookmarking message:', message.content.substring(0, 50) + '...');
+                break;
+                
+            case 'like':
+                // TODO: Implement like functionality (could send feedback to backend)
+                console.log('Liked message:', messageIndex);
+                break;
+                
+            case 'dislike':
+                // TODO: Implement dislike functionality (could send feedback to backend)
+                console.log('Disliked message:', messageIndex);
+                break;
+                
+            default:
+                console.log('Unknown action:', action);
+        }
+    };
+
     // Return all state and functions needed by the App component
     return {
         // State
@@ -306,7 +349,8 @@ const useAppLogic = () => {
         loadSessionMessages,
         updateSessionTitle,
         archiveSession,
-        deleteSession
+        deleteSession,
+        handleMessageAction
     };
 };
 

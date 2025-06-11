@@ -49,11 +49,12 @@ function App() {
         loadSessionMessages,
         updateSessionTitle,
         archiveSession,
-        deleteSession
+        deleteSession,
+        handleMessageAction
     } = useAppLogic();
 
     return (
-        <div className="flex h-screen bg-gray-900 text-white">
+        <div className="flex h-screen text-white" style={{backgroundColor: '#101827'}}>
             {/* Left Sidebar */}
             <Sidebar 
                 sidebarOpen={sidebarOpen}
@@ -70,21 +71,25 @@ function App() {
             />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col">
-                {/* Top Bar */}
-                <TopBar 
-                    sidebarOpen={sidebarOpen}
-                    setSidebarOpen={setSidebarOpen}
-                    currentSessionId={currentSessionId}
-                    sessions={sessions}
-                    showProfileMenu={showProfileMenu}
-                    setShowProfileMenu={setShowProfileMenu}
-                    onOpenSettingsModal={openSettingsModal}
-                    onOpenLunarModal={openLunarModal}
-                    onOpenArchivedModal={openArchivedModal}
-                    systemStatus={systemStatus}
-                    onToggleDomain={toggleDomain}
-                />
+            <div className="flex-1 flex flex-col relative">
+                {/* Top Bar - Overlay */}
+                <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
+                    <div className="pointer-events-auto">
+                        <TopBar 
+                            sidebarOpen={sidebarOpen}
+                            setSidebarOpen={setSidebarOpen}
+                            currentSessionId={currentSessionId}
+                            sessions={sessions}
+                            showProfileMenu={showProfileMenu}
+                            setShowProfileMenu={setShowProfileMenu}
+                            onOpenSettingsModal={openSettingsModal}
+                            onOpenLunarModal={openLunarModal}
+                            onOpenArchivedModal={openArchivedModal}
+                            systemStatus={systemStatus}
+                            onToggleDomain={toggleDomain}
+                        />
+                    </div>
+                </div>
 
                 {/* Chat Area */}
                 <ChatArea 
@@ -101,6 +106,7 @@ function App() {
                     selectedSuggestion={selectedSuggestion}
                     onSuggestionClick={handleSuggestionClick}
                     onDismissSuggestions={dismissSuggestions}
+                    onMessageAction={handleMessageAction}
                 />
             </div>
 
@@ -128,4 +134,5 @@ function App() {
 }
 
 // Render the app
-ReactDOM.render(<App />, document.getElementById('root')); 
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />); 

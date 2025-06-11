@@ -16,6 +16,8 @@ const TopBar = ({
     systemStatus,
     onToggleDomain
 }) => {
+    // TODO: Re-enable archive feature when multi-user authentication is implemented
+    const ARCHIVE_FEATURE_ENABLED = false;
     // State for domain dropdown
     const [showDomainDropdown, setShowDomainDropdown] = React.useState(false);
     // Get current session title for display
@@ -27,7 +29,7 @@ const TopBar = ({
     };
 
     return (
-        <div className="bg-gray-800 border-b border-gray-700 p-4 grid grid-cols-3 items-center">
+        <div className="bg-transparent h-16 px-4 grid grid-cols-3 items-center">
             {/* Left Section */}
             <div className="flex items-center space-x-4">
                 {/* Sidebar Toggle */}
@@ -108,11 +110,8 @@ const TopBar = ({
                 </div>
             </div>
 
-            {/* Center Section - Current Session Info */}
+            {/* Center Section - Empty */}
             <div className="text-center">
-                <span className="text-sm text-gray-400">
-                    {getCurrentSessionTitle()}
-                </span>
             </div>
 
             {/* Right Section - Profile Menu */}
@@ -142,18 +141,20 @@ const TopBar = ({
                                     </svg>
                                                                     <span>Settings</span>
                             </button>
-                            <button
-                                onClick={() => {
-                                    onOpenArchivedModal();
-                                    setShowProfileMenu(false);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center space-x-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
-                                </svg>
-                                <span>Archived Sessions</span>
-                            </button>
+                            {ARCHIVE_FEATURE_ENABLED && (
+                                <button
+                                    onClick={() => {
+                                        onOpenArchivedModal();
+                                        setShowProfileMenu(false);
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center space-x-2"
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
+                                    </svg>
+                                    <span>Archived Sessions</span>
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     onOpenLunarModal();
