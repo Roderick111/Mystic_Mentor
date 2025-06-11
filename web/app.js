@@ -54,8 +54,9 @@ function App() {
     } = useAppLogic();
 
     return (
-        <div className="flex h-screen text-white" style={{backgroundColor: '#101827'}}>
-            {/* Left Sidebar */}
+        <ThemeProvider>
+            <div className="flex h-screen text-white bg-gray-900">
+                {/* Left Sidebar */}
             <Sidebar 
                 sidebarOpen={sidebarOpen}
                 setSidebarOpen={setSidebarOpen}
@@ -130,6 +131,7 @@ function App() {
                 onDeleteSession={deleteSession}
             />
         </div>
+        </ThemeProvider>
     );
 }
 

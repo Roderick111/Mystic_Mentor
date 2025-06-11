@@ -114,8 +114,11 @@ const TopBar = ({
             <div className="text-center">
             </div>
 
-            {/* Right Section - Profile Menu */}
-            <div className="flex justify-end">
+            {/* Right Section - Theme Switcher + Profile Menu */}
+            <div className="flex justify-end items-center space-x-3">
+                {/* Theme Switcher */}
+                <ThemeSwitcher />
+                
                 <div className="relative">
                     <button
                         onClick={() => setShowProfileMenu(!showProfileMenu)}
