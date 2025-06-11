@@ -46,7 +46,8 @@ load_dotenv()
 llm = init_chat_model("gemini-2.0-flash-001", model_provider="google_genai")
 
 # Initialize system components
-domain_manager = DomainManager(initial_domains={'lunar', 'ifs'})
+# TODO: Temporarily using only 'lunar' since 'ifs' is disabled. Re-enable 'ifs' when domains are restored.
+domain_manager = DomainManager(initial_domains={'lunar'})
 semantic_detector = SemanticDomainDetector()
 negative_detector = NegativeIntentDetector()
 qa_cache = QACache()

@@ -21,8 +21,14 @@ class DomainManager:
     """
     
     # Available knowledge domains
-    AVAILABLE_DOMAINS = {"lunar", "numerology", "ifs", "astrology", "crystals", "tarot", "archetypes"}
-    MAX_ACTIVE_DOMAINS = 2
+    # TODO: Temporarily disabled domains: "archetypes", "astrology", "ifs", "tarot" 
+    # Re-enable by adding them back to the set below
+    AVAILABLE_DOMAINS = {"lunar", "numerology", "crystals"}
+    
+    # TODO: TEMPORARY - Multiple domain support disabled for backend simplification
+    # Change back to 2 (or higher) when ready to re-enable multiple domains
+    # Original value was: MAX_ACTIVE_DOMAINS = 2
+    MAX_ACTIVE_DOMAINS = 1
     
     def __init__(self, initial_domains: Set[str] = None):
         """

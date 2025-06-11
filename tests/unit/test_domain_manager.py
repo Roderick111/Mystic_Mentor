@@ -8,6 +8,11 @@ Tests all domain management functionality including:
 - ChromaDB filter generation
 - Status reporting
 - Edge cases and error handling
+
+NOTE: TEMPORARY MODIFICATIONS FOR SINGLE DOMAIN MODE
+Several tests have been updated to work with MAX_ACTIVE_DOMAINS = 1.
+Search for "TODO: TEMPORARY" comments to find modified tests.
+When re-enabling multiple domains, revert these changes.
 """
 
 import unittest
@@ -36,31 +41,37 @@ class TestDomainManager(unittest.TestCase):
     
     def test_custom_initialization_valid_domains(self):
         """Test initialization with custom valid domains."""
-        custom_domains = {"astrology", "crystals"}
+        custom_domains = {"numerology", "crystals"}
         dm = DomainManager(custom_domains)
-        self.assertEqual(set(dm.active_domains), custom_domains)
-        self.assertEqual(len(dm.active_domains), 2)
+        # TODO: TEMPORARY - Updated for single domain mode (was: custom_domains)
+        # Only one domain can be active at a time now
+        self.assertEqual(len(dm.active_domains), 1)
+        self.assertTrue(set(dm.active_domains).issubset(custom_domains))
     
     def test_custom_initialization_invalid_domains(self):
         """Test initialization with invalid domains (should be filtered out)."""
-        mixed_domains = {"lunar", "invalid_domain", "astrology"}
+        mixed_domains = {"lunar", "invalid_domain", "numerology"}
         dm = DomainManager(mixed_domains)
-        expected = {"lunar", "astrology"}
-        self.assertEqual(set(dm.active_domains), expected)
+        # TODO: TEMPORARY - Updated for single domain mode (was: {"lunar", "numerology"})
+        # Only one domain can be active, and invalid domains should be filtered out
+        valid_expected_domains = {"lunar", "numerology"}
+        self.assertEqual(len(dm.active_domains), 1)
+        self.assertTrue(set(dm.active_domains).issubset(valid_expected_domains))
     
     def test_custom_initialization_too_many_domains(self):
         """Test initialization with more than max allowed domains."""
-        too_many_domains = {"lunar", "astrology", "crystals", "numerology"}
+        too_many_domains = {"lunar", "numerology", "crystals"}  # Only 3 domains but MAX is 2
         dm = DomainManager(too_many_domains)
         self.assertEqual(len(dm.active_domains), DomainManager.MAX_ACTIVE_DOMAINS)
         self.assertTrue(set(dm.active_domains).issubset(DomainManager.AVAILABLE_DOMAINS))
     
     def test_enable_valid_domain(self):
         """Test enabling a valid domain."""
-        result = self.dm.enable_domain("astrology")
+        result = self.dm.enable_domain("numerology")
         self.assertTrue(result)
-        self.assertIn("astrology", self.dm.active_domains)
-        self.assertEqual(len(self.dm.active_domains), 2)
+        self.assertIn("numerology", self.dm.active_domains)
+        # TODO: TEMPORARY - Updated for single domain mode (was: 2)
+        self.assertEqual(len(self.dm.active_domains), 1)
     
     def test_enable_invalid_domain(self):
         """Test enabling an invalid domain."""
@@ -77,35 +88,34 @@ class TestDomainManager(unittest.TestCase):
     
     def test_fifo_replacement(self):
         """Test FIFO replacement when adding domains beyond capacity."""
-        # Fill to capacity
-        self.dm.enable_domain("astrology")
-        self.assertEqual(len(self.dm.active_domains), 2)
+        # TODO: TEMPORARY - Updated for single domain mode
+        # Original test was for 2-domain capacity, now testing 1-domain capacity
         
-        # Add third domain - should trigger FIFO
-        self.dm.enable_domain("crystals")
+        # Add second domain - should trigger FIFO (since MAX_ACTIVE_DOMAINS = 1)
+        self.dm.enable_domain("numerology")
         
         # Should still have max domains
         self.assertEqual(len(self.dm.active_domains), DomainManager.MAX_ACTIVE_DOMAINS)
         
         # Should contain the new domain
-        self.assertIn("crystals", self.dm.active_domains)
+        self.assertIn("numerology", self.dm.active_domains)
         
         # Should have removed the oldest domain (lunar was first)
         self.assertNotIn("lunar", self.dm.active_domains)
         
-        # Should contain astrology and crystals
-        self.assertEqual(set(self.dm.active_domains), {"astrology", "crystals"})
+        # Should only contain numerology (single domain mode)
+        self.assertEqual(set(self.dm.active_domains), {"numerology"})
     
     def test_disable_active_domain(self):
         """Test disabling an active domain."""
-        self.dm.enable_domain("astrology")
-        result = self.dm.disable_domain("astrology")
+        self.dm.enable_domain("numerology")
+        result = self.dm.disable_domain("numerology")
         self.assertTrue(result)
-        self.assertNotIn("astrology", self.dm.active_domains)
+        self.assertNotIn("numerology", self.dm.active_domains)
     
     def test_disable_inactive_domain(self):
         """Test disabling a domain that's not active."""
-        result = self.dm.disable_domain("astrology")
+        result = self.dm.disable_domain("numerology")
         self.assertFalse(result)
         # Active domains should remain unchanged
         self.assertEqual(self.dm.active_domains, ["lunar"])
@@ -118,14 +128,16 @@ class TestDomainManager(unittest.TestCase):
     
     def test_get_status_content(self):
         """Test that get_status returns correct content."""
-        self.dm.enable_domain("astrology")
+        self.dm.enable_domain("numerology")
         status = self.dm.get_status()
         
-        self.assertEqual(set(status["active_domains"]), {"astrology", "lunar"})
+        # TODO: TEMPORARY - Updated for single domain mode (was: {"numerology", "lunar"})
+        self.assertEqual(set(status["active_domains"]), {"numerology"})
         self.assertEqual(set(status["available_domains"]), DomainManager.AVAILABLE_DOMAINS)
         self.assertEqual(status["max_active_domains"], DomainManager.MAX_ACTIVE_DOMAINS)
         
-        expected_inactive = DomainManager.AVAILABLE_DOMAINS - {"astrology", "lunar"}
+        # TODO: TEMPORARY - Updated for single domain mode
+        expected_inactive = DomainManager.AVAILABLE_DOMAINS - {"numerology"}
         self.assertEqual(set(status["inactive_domains"]), expected_inactive)
     
     def test_chroma_filter_single_domain(self):
@@ -135,16 +147,18 @@ class TestDomainManager(unittest.TestCase):
         self.assertEqual(filter_dict, expected)
     
     def test_chroma_filter_multiple_domains(self):
-        """Test ChromaDB filter generation for multiple domains."""
-        self.dm.enable_domain("astrology")
+        """Test ChromaDB filter generation - currently single domain mode."""
+        # TODO: TEMPORARY - Updated for single domain mode
+        # Original test was for multiple domains, now testing single domain behavior
+        self.dm.enable_domain("numerology")
         filter_dict = self.dm.get_chroma_filter()
         
         self.assertIn("domain", filter_dict)
         self.assertIn("$in", filter_dict["domain"])
         
-        # Check that both domains are included
+        # Check that only the active domain is included (single domain mode)
         domains_in_filter = set(filter_dict["domain"]["$in"])
-        self.assertEqual(domains_in_filter, {"lunar", "astrology"})
+        self.assertEqual(domains_in_filter, {"numerology"})
     
     def test_chroma_filter_empty_domains(self):
         """Test ChromaDB filter generation when no domains are active."""
@@ -155,16 +169,19 @@ class TestDomainManager(unittest.TestCase):
     def test_is_domain_active(self):
         """Test domain activity checking."""
         self.assertTrue(self.dm.is_domain_active("lunar"))
-        self.assertFalse(self.dm.is_domain_active("astrology"))
+        self.assertFalse(self.dm.is_domain_active("numerology"))
         
-        self.dm.enable_domain("astrology")
-        self.assertTrue(self.dm.is_domain_active("astrology"))
+        self.dm.enable_domain("numerology")
+        self.assertTrue(self.dm.is_domain_active("numerology"))
+        # TODO: TEMPORARY - In single domain mode, lunar should be replaced
+        self.assertFalse(self.dm.is_domain_active("lunar"))
     
     def test_get_active_domains_sorted(self):
         """Test that active domains are returned in sorted order."""
-        self.dm.enable_domain("astrology")
+        self.dm.enable_domain("numerology")
         active = self.dm.get_active_domains()
-        self.assertEqual(active, ["astrology", "lunar"])  # Should be sorted
+        # TODO: TEMPORARY - Updated for single domain mode (was: ["lunar", "numerology"])
+        self.assertEqual(active, ["numerology"])  # Should only have one domain
     
     def test_get_inactive_domains_sorted(self):
         """Test that inactive domains are returned in sorted order."""
@@ -174,7 +191,7 @@ class TestDomainManager(unittest.TestCase):
     
     def test_reset_to_default(self):
         """Test resetting to default configuration."""
-        self.dm.enable_domain("astrology")
+        self.dm.enable_domain("numerology")
         self.dm.enable_domain("crystals")
         
         self.dm.reset_to_default()
@@ -198,47 +215,53 @@ class TestDomainManager(unittest.TestCase):
         self.assertGreater(DomainManager.MAX_ACTIVE_DOMAINS, 0)
         
         # Test that expected domains are available
-        expected_domains = {"lunar", "numerology", "ifs", "astrology", "crystals", "tarot"}
+        # TODO: Temporarily reduced set due to disabled domains: "archetypes", "astrology", "ifs", "tarot"
+        expected_domains = {"lunar", "numerology", "crystals"}
         self.assertEqual(DomainManager.AVAILABLE_DOMAINS, expected_domains)
     
     def test_validate_domains_method(self):
         """Test the _validate_domains private method."""
-        # Test with valid domains
-        valid_domains = {"lunar", "astrology"}
+        # TODO: TEMPORARY - Updated for single domain mode
+        # Test with valid domains (should be limited to 1)
+        valid_domains = {"lunar", "numerology"}
         result = self.dm._validate_domains(valid_domains)
-        self.assertEqual(result, valid_domains)
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result.issubset(valid_domains))
         
-        # Test with mixed valid/invalid domains
-        mixed_domains = {"lunar", "invalid", "astrology"}
+        # Test with mixed valid/invalid domains  
+        mixed_domains = {"lunar", "invalid", "numerology"}
         result = self.dm._validate_domains(mixed_domains)
-        self.assertEqual(result, {"lunar", "astrology"})
+        self.assertEqual(len(result), 1)
+        self.assertTrue(result.issubset({"lunar", "numerology"}))
         
         # Test with too many domains
-        too_many = {"lunar", "astrology", "crystals", "numerology"}
+        # TODO: TEMPORARY - Updated comment for single domain mode (was: max is 2)
+        too_many = {"lunar", "numerology", "crystals"}  # 3 domains, max is 1
         result = self.dm._validate_domains(too_many)
         self.assertEqual(len(result), DomainManager.MAX_ACTIVE_DOMAINS)
     
     def test_concurrent_operations(self):
         """Test multiple operations in sequence."""
-        # Enable multiple domains
-        self.dm.enable_domain("astrology")
-        self.dm.enable_domain("crystals")  # Should trigger FIFO
+        # TODO: TEMPORARY - Updated for single domain mode
+        # Enable numerology (should replace lunar due to FIFO)
+        self.dm.enable_domain("numerology")
         
-        # Check state
-        self.assertEqual(len(self.dm.active_domains), 2)
+        # Check state (single domain mode)
+        self.assertEqual(len(self.dm.active_domains), 1)
         self.assertNotIn("lunar", self.dm.active_domains)  # Should be removed
-        self.assertEqual(set(self.dm.active_domains), {"astrology", "crystals"})
+        self.assertEqual(set(self.dm.active_domains), {"numerology"})
         
-        # Disable one domain
-        self.dm.disable_domain("astrology")
+        # Enable crystals (should replace numerology)
+        self.dm.enable_domain("crystals")
         self.assertEqual(len(self.dm.active_domains), 1)
         self.assertIn("crystals", self.dm.active_domains)
+        self.assertNotIn("numerology", self.dm.active_domains)
         
-        # Re-enable lunar
+        # Re-enable lunar (should replace crystals)
         self.dm.enable_domain("lunar")
-        self.assertEqual(len(self.dm.active_domains), 2)
+        self.assertEqual(len(self.dm.active_domains), 1)
         self.assertIn("lunar", self.dm.active_domains)
-        self.assertIn("crystals", self.dm.active_domains)
+        self.assertNotIn("crystals", self.dm.active_domains)
 
 
 if __name__ == "__main__":

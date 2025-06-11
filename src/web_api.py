@@ -97,6 +97,7 @@ class SystemStatus(BaseModel):
 class SessionInfo(BaseModel):
     """Session information"""
     session_id: str
+    title: Optional[str] = None
     message_count: int
     created_at: datetime
     last_activity: datetime
@@ -335,6 +336,7 @@ async def list_sessions():
             
             sessions.append(SessionInfo(
                 session_id=session["thread_id"],
+                title=session.get("title"),
                 message_count=session["message_count"],
                 created_at=created_at,
                 last_activity=last_activity,
@@ -374,6 +376,70 @@ async def get_session_history(session_id: str):
     except Exception as e:
         web_logger.error(f"History retrieval error: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving session history")
+
+@app.put("/sessions/{session_id}/title")
+async def update_session_title(session_id: str, request: dict):
+    """Update session title"""
+    try:
+        title = request.get("title", "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+        
+        _, session_manager = get_graph_and_session_manager()
+        
+        # Update session title in the database
+        success = session_manager.update_session_title(session_id, title)
+        
+        if success:
+            return {"success": True, "message": "Session title updated"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        web_logger.error(f"Session title update error: {e}")
+        raise HTTPException(status_code=500, detail="Error updating session title")
+
+@app.post("/sessions/{session_id}/archive")
+async def archive_session(session_id: str):
+    """Archive a session"""
+    try:
+        _, session_manager = get_graph_and_session_manager()
+        
+        # Archive session in the database
+        success = session_manager.archive_session(session_id)
+        
+        if success:
+            return {"success": True, "message": "Session archived"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        web_logger.error(f"Session archive error: {e}")
+        raise HTTPException(status_code=500, detail="Error archiving session")
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session permanently"""
+    try:
+        _, session_manager = get_graph_and_session_manager()
+        
+        # Delete session from the database
+        success = session_manager.delete_session(session_id)
+        
+        if success:
+            return {"success": True, "message": "Session deleted"}
+        else:
+            raise HTTPException(status_code=404, detail="Session not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        web_logger.error(f"Session deletion error: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting session")
 
 @app.post("/command", response_model=CommandResponse)
 async def execute_command(request: CommandRequest):

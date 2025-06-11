@@ -219,10 +219,12 @@ class UnifiedSessionManager:
                 if thread_id not in sessions_dict:
                     sessions_dict[thread_id] = {
                         "thread_id": thread_id,
+                        "title": metadata.get("title"),
                         "created_at": metadata.get("created_at", "unknown"),
                         "last_activity": last_activity,
                         "message_count": message_count,
-                        "domains_used": metadata.get("domains_used", [])
+                        "domains_used": metadata.get("domains_used", []),
+                        "archived": metadata.get("archived", False)
                     }
                 else:
                     # Keep the checkpoint with the most recent activity
@@ -230,14 +232,16 @@ class UnifiedSessionManager:
                     if last_activity != "unknown" and (existing_activity == "unknown" or last_activity > existing_activity):
                         sessions_dict[thread_id] = {
                             "thread_id": thread_id,
+                            "title": metadata.get("title"),
                             "created_at": metadata.get("created_at", "unknown"),
                             "last_activity": last_activity,
                             "message_count": message_count,
-                            "domains_used": metadata.get("domains_used", [])
+                            "domains_used": metadata.get("domains_used", []),
+                            "archived": metadata.get("archived", False)
                         }
             
-            # Convert dict to list and sort by last activity (newest first)
-            sessions = list(sessions_dict.values())
+            # Convert dict to list, filter out archived sessions, and sort by last activity (newest first)
+            sessions = [s for s in sessions_dict.values() if not s.get("archived", False)]
             sessions.sort(key=lambda x: x.get("last_activity", ""), reverse=True)
             return sessions[:limit]
             
@@ -298,4 +302,53 @@ class UnifiedSessionManager:
             state_snapshot = self.graph.get_state(config)
             return state_snapshot and state_snapshot.values is not None
         except Exception:
+            return False
+    
+    def update_session_title(self, thread_id: str, title: str) -> bool:
+        """Update session title."""
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        try:
+            # Get current state
+            current_state = self.graph.get_state(config)
+            if not current_state or not current_state.values:
+                return False
+            
+            # Update metadata with new title
+            metadata = current_state.values.get("session_metadata", {})
+            metadata["title"] = title
+            metadata["last_activity"] = datetime.now().isoformat()
+            
+            # Update state
+            self.graph.update_state(config, {"session_metadata": metadata})
+            logger.debug(f"Updated session {thread_id[:8]}... title to: {title}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update session title: {e}")
+            return False
+    
+    def archive_session(self, thread_id: str) -> bool:
+        """Archive a session by marking it as archived."""
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        try:
+            # Get current state
+            current_state = self.graph.get_state(config)
+            if not current_state or not current_state.values:
+                return False
+            
+            # Update metadata to mark as archived
+            metadata = current_state.values.get("session_metadata", {})
+            metadata["archived"] = True
+            metadata["archived_at"] = datetime.now().isoformat()
+            metadata["last_activity"] = datetime.now().isoformat()
+            
+            # Update state
+            self.graph.update_state(config, {"session_metadata": metadata})
+            logger.debug(f"Archived session {thread_id[:8]}...")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to archive session: {e}")
             return False 
