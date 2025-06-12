@@ -22,10 +22,33 @@ const ThemeProvider = ({ children }) => {
         applyTheme(savedTheme);
     }, []);
 
-    // Apply theme to document
+    // Apply theme to document with Safari-specific handling
     const applyTheme = (newTheme) => {
-        document.documentElement.setAttribute('data-theme', newTheme);
-        document.documentElement.className = newTheme;
+        const html = document.documentElement;
+        
+        // Safari-specific: Disable transitions during theme change
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        
+        if (isSafari) {
+            // Temporarily disable transitions for Safari
+            html.classList.add('theme-transitioning');
+            
+            // Apply theme changes
+            html.setAttribute('data-theme', newTheme);
+            html.className = `${newTheme} theme-transitioning`;
+            
+            // Re-enable transitions after DOM update
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    html.classList.remove('theme-transitioning');
+                    html.className = newTheme;
+                });
+            });
+        } else {
+            // Standard behavior for other browsers
+            html.setAttribute('data-theme', newTheme);
+            html.className = newTheme;
+        }
     };
 
     // Set theme function

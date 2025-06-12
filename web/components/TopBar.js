@@ -114,66 +114,19 @@ const TopBar = ({
             <div className="text-center">
             </div>
 
-            {/* Right Section - Theme Switcher + Profile Menu */}
+            {/* Right Section - Theme Switcher + User Profile */}
             <div className="flex justify-end items-center space-x-3">
                 {/* Theme Switcher */}
                 <ThemeSwitcher />
                 
-                <div className="relative">
-                    <button
-                        onClick={() => setShowProfileMenu(!showProfileMenu)}
-                        className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center hover:opacity-80 transition-opacity"
-                    >
-                        <span className="text-white font-bold text-sm">U</span>
-                    </button>
-
-                    {/* Profile Dropdown */}
-                    {showProfileMenu && (
-                        <div className="absolute right-0 mt-2 w-48 bg-gray-800 rounded-lg shadow-lg border border-gray-700 z-50">
-                            <div className="py-1">
-                                <button
-                                    onClick={() => {
-                                        onOpenSettingsModal();
-                                        setShowProfileMenu(false);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center space-x-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                                                    <span>Settings</span>
-                            </button>
-                            {ARCHIVE_FEATURE_ENABLED && (
-                                <button
-                                    onClick={() => {
-                                        onOpenArchivedModal();
-                                        setShowProfileMenu(false);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center space-x-2"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
-                                    </svg>
-                                    <span>Archived Sessions</span>
-                                </button>
-                            )}
-                            <button
-                                onClick={() => {
-                                    onOpenLunarModal();
-                                    setShowProfileMenu(false);
-                                }}
-                                className="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center space-x-2"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                                </svg>
-                                <span>Lunar Info</span>
-                            </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
+                {/* User Profile Icon with Menu */}
+                <TopBarUserProfile 
+                    showProfileMenu={showProfileMenu}
+                    setShowProfileMenu={setShowProfileMenu}
+                    onOpenSettingsModal={onOpenSettingsModal}
+                    onOpenLunarModal={onOpenLunarModal}
+                    onOpenArchivedModal={onOpenArchivedModal}
+                />
             </div>
 
             {/* Click outside to close domain dropdown */}

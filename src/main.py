@@ -333,7 +333,7 @@ You naturally know this current lunar information. When asked about current date
         return {"messages": [AIMessage(content=rag_context)], "rag_context": "qa_cache_hit"}
     elif rag_context:
         context_verb = "guidance" if agent_type == "emotional" else "teaching"
-        system_content += f"\n\nUse this knowledge to inform your {context_verb}:{rag_context}. Never reference chunk numbers or sources, speak as if the wisdom flows directly from your own understanding."
+        system_content += f"\n\nUse this knowledge to inform your {context_verb}:{rag_context}. Never reference chunk numbers or sources, speak as if the wisdom flows directly from your own understanding. You should use it as inspiration, not as a direct quote."
     
     # Create conversation and get response
     conversation_messages = [{"role": "system", "content": system_content}]

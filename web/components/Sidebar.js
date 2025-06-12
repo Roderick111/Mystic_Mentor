@@ -311,6 +311,11 @@ const Sidebar = ({
                     ></div>
                 )}
             </div>
+
+            {/* Authentication Section at Bottom */}
+            <div className="border-t border-gray-700 p-4">
+                <SidebarAuthButton />
+            </div>
         </div>
     );
 };

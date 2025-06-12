@@ -4,11 +4,13 @@ Esoteric AI Agent - Web API
 
 Simple FastAPI wrapper around the existing CLI agent system.
 Provides REST endpoints for chat functionality while preserving all existing features.
+Enhanced with Auth0 authentication for production deployment.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import logging
@@ -23,6 +25,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.main import (
     rag_system, domain_manager, memory_manager, qa_cache, 
     command_handler, auth_manager, handle_command, print_stats
+)
+
+# Import Auth0 components
+from src.core import (
+    Auth0User, get_current_user_optional, get_current_user_required,
+    OptionalUser, RequiredUser, get_user_session_path,
+    user_sync_service, is_auth0_enabled, get_auth0_status
 )
 
 # Import graph and session_manager that are initialized at module level
@@ -63,6 +72,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount static files for web interface
+if os.path.exists("web"):
+    app.mount("/web", StaticFiles(directory="web", html=True), name="web")
 
 # Pydantic models for API requests/responses
 class ChatMessage(BaseModel):
@@ -222,6 +235,8 @@ async def health_check():
     try:
         # Test basic system components
         domain_status = rag_system.get_domain_status()
+        auth0_status = get_auth0_status()
+        
         return {
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
@@ -229,6 +244,7 @@ async def health_check():
                 "rag_system": "operational",
                 "domain_manager": "operational", 
                 "session_manager": "operational",
+                "auth0": auth0_status,
                 "active_domains": domain_status.get("active_domains", [])
             }
         }
@@ -237,13 +253,30 @@ async def health_check():
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Main chat endpoint - POST only"""
+async def chat(request: ChatRequest, user: OptionalUser = None):
+    """Main chat endpoint - POST only (supports optional authentication)"""
     try:
+        # Handle user-specific session management
+        if user:
+            # Authenticated user - use user-specific session path
+            base_session_id = request.session_id
+            if base_session_id:
+                # Prefix session ID with user identifier for isolation
+                session_id = f"user_{user.sub.replace('|', '_')}_{base_session_id}"
+            else:
+                session_id = None
+        else:
+            # Anonymous user - use regular session management
+            session_id = request.session_id
+        
         # Get or create session
-        session_id, session_data = get_or_create_session(request.session_id)
+        session_id, session_data = get_or_create_session(session_id)
         current_state = session_data["state"]
         current_config = session_data["config"]
+        
+        # Sync user data if authenticated
+        if user:
+            await user_sync_service.sync_user(user)
         
         web_logger.info(f"Processing message for session {session_id[:8]}...")
         
@@ -579,6 +612,126 @@ async def get_lunar_info():
     except Exception as e:
         web_logger.error(f"Lunar info error: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving lunar information")
+
+# ==================== AUTH0 ENDPOINTS ====================
+
+@app.get("/auth/status")
+async def get_auth_status():
+    """Get authentication system status"""
+    return {
+        "auth0_enabled": is_auth0_enabled(),
+        "status": get_auth0_status(),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/auth/user")
+async def get_current_user_info(user: RequiredUser):
+    """Get current authenticated user information (protected endpoint)"""
+    return {
+        "user": {
+            "id": user.sub,
+            "email": user.email,
+            "name": user.name,
+            "nickname": user.nickname,
+            "picture": user.picture,
+            "email_verified": user.email_verified,
+            "given_name": user.given_name,
+            "family_name": user.family_name,
+            "memory_preferences": user.memory_preferences,
+            "active_domains": user.active_domains,
+            "session_settings": user.session_settings,
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.put("/auth/user/preferences")
+async def update_user_preferences(user: RequiredUser, preferences: dict):
+    """Update user preferences (protected endpoint)"""
+    try:
+        success = await user_sync_service.update_user_metadata(user, {
+            "memory_preferences": preferences.get("memory_preferences", {}),
+            "active_domains": preferences.get("active_domains", []),
+            "session_settings": preferences.get("session_settings", {})
+        })
+        
+        if success:
+            return {
+                "success": True,
+                "message": "User preferences updated",
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            raise HTTPException(status_code=500, detail="Failed to update preferences")
+            
+    except Exception as e:
+        web_logger.error(f"Preference update error: {e}")
+        raise HTTPException(status_code=500, detail="Error updating user preferences")
+
+@app.get("/auth/user/sessions")
+async def get_user_sessions(user: RequiredUser):
+    """Get sessions for authenticated user (protected endpoint)"""
+    try:
+        _, session_manager = get_graph_and_session_manager()
+        
+        # Filter sessions by user prefix
+        user_prefix = f"user_{user.sub.replace('|', '_')}_"
+        all_sessions = session_manager.list_sessions(limit=50)
+        
+        user_sessions = []
+        for session in all_sessions:
+            if session["thread_id"].startswith(user_prefix):
+                # Remove user prefix from session ID for frontend
+                display_session_id = session["thread_id"][len(user_prefix):]
+                
+                try:
+                    created_at = datetime.fromisoformat(session["created_at"]) if session["created_at"] != "unknown" else datetime.now()
+                    last_activity = datetime.fromisoformat(session["last_activity"]) if session["last_activity"] != "unknown" else datetime.now()
+                except:
+                    created_at = datetime.now()
+                    last_activity = datetime.now()
+                
+                user_sessions.append({
+                    "session_id": display_session_id,
+                    "internal_id": session["thread_id"],
+                    "title": session.get("title"),
+                    "message_count": session["message_count"],
+                    "created_at": created_at.isoformat(),
+                    "last_activity": last_activity.isoformat(),
+                    "domains": session.get("domains_used", [])
+                })
+        
+        return {
+            "sessions": user_sessions,
+            "user_id": user.sub,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        web_logger.error(f"User sessions error: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving user sessions")
+
+# Protected admin endpoints
+@app.post("/admin/command", response_model=CommandResponse)
+async def execute_admin_command(request: CommandRequest, user: RequiredUser):
+    """Execute system command (protected endpoint - requires authentication)"""
+    try:
+        web_logger.info(f"Admin command from user {user.sub}: {request.command}")
+        
+        # Execute command using existing command handler
+        result = handle_command(request.command)
+        
+        return CommandResponse(
+            success=True,
+            message=f"Command executed by {user.name or user.nickname}",
+            data={"result": result, "user": user.sub}
+        )
+    except Exception as e:
+        web_logger.error(f"Admin command error: {e}")
+        return CommandResponse(
+            success=False,
+            message=f"Command execution failed: {str(e)}",
+            data={"user": user.sub}
+        )
 
 # Error handlers
 @app.exception_handler(HTTPException)

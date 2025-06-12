@@ -55,9 +55,13 @@ function App() {
 
     return (
         <ThemeProvider>
-            <div className="flex h-screen text-white bg-gray-900">
-                {/* Left Sidebar */}
-            <Sidebar 
+            <div className="flex flex-col h-screen text-white bg-gray-900 overflow-hidden">
+                {/* Authentication Status Banner */}
+                <AuthStatusBanner />
+                
+                <div className="flex flex-1 min-h-0">
+                    {/* Left Sidebar */}
+                    <Sidebar 
                 sidebarOpen={sidebarOpen}
                 setSidebarOpen={setSidebarOpen}
                 systemStatus={systemStatus}
@@ -72,7 +76,7 @@ function App() {
             />
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col relative">
+            <div className="flex-1 flex flex-col relative min-h-0">
                 {/* Top Bar - Overlay */}
                 <div className="absolute top-0 left-0 right-0 z-50 pointer-events-none">
                     <div className="pointer-events-auto">
@@ -92,45 +96,48 @@ function App() {
                     </div>
                 </div>
 
-                {/* Chat Area */}
-                <ChatArea 
-                    messages={messages}
-                    isLoading={isLoading}
-                    inputValue={inputValue}
-                    setInputValue={setInputValue}
-                    onSendMessage={sendMessage}
-                    messagesEndRef={messagesEndRef}
-                    inputRef={inputRef}
+                {/* Chat Area - Fixed Height Container */}
+                <div className="flex-1 flex flex-col min-h-0">
+                    <ChatArea 
+                        messages={messages}
+                        isLoading={isLoading}
+                        inputValue={inputValue}
+                        setInputValue={setInputValue}
+                        onSendMessage={sendMessage}
+                        messagesEndRef={messagesEndRef}
+                        inputRef={inputRef}
+                        systemStatus={systemStatus}
+                        isNewSession={isNewSession}
+                        suggestionsDismissed={suggestionsDismissed}
+                        selectedSuggestion={selectedSuggestion}
+                        onSuggestionClick={handleSuggestionClick}
+                        onDismissSuggestions={dismissSuggestions}
+                        onMessageAction={handleMessageAction}
+                    />
+                </div>
+            </div>
+                </div>
+
+                {/* Modals */}
+                <Modals
+                    showSettingsModal={showSettingsModal}
+                    setShowSettingsModal={setShowSettingsModal}
+                    showLunarModal={showLunarModal}
+                    setShowLunarModal={setShowLunarModal}
+                    showProfileMenu={showProfileMenu}
+                    setShowProfileMenu={setShowProfileMenu}
                     systemStatus={systemStatus}
-                    isNewSession={isNewSession}
-                    suggestionsDismissed={suggestionsDismissed}
-                    selectedSuggestion={selectedSuggestion}
-                    onSuggestionClick={handleSuggestionClick}
-                    onDismissSuggestions={dismissSuggestions}
-                    onMessageAction={handleMessageAction}
+                    onToggleDomain={toggleDomain}
+                />
+
+                {/* Archived Sessions Modal */}
+                <ArchivedSessions
+                    showArchivedModal={showArchivedModal}
+                    setShowArchivedModal={setShowArchivedModal}
+                    onLoadSession={loadSessionMessages}
+                    onDeleteSession={deleteSession}
                 />
             </div>
-
-                        {/* Modals */}
-            <Modals
-                showSettingsModal={showSettingsModal}
-                setShowSettingsModal={setShowSettingsModal}
-                showLunarModal={showLunarModal}
-                setShowLunarModal={setShowLunarModal}
-                showProfileMenu={showProfileMenu}
-                setShowProfileMenu={setShowProfileMenu}
-                systemStatus={systemStatus}
-                onToggleDomain={toggleDomain}
-            />
-
-            {/* Archived Sessions Modal */}
-            <ArchivedSessions
-                showArchivedModal={showArchivedModal}
-                setShowArchivedModal={setShowArchivedModal}
-                onLoadSession={loadSessionMessages}
-                onDeleteSession={deleteSession}
-            />
-        </div>
         </ThemeProvider>
     );
 }

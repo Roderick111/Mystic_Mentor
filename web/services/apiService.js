@@ -11,9 +11,14 @@ class ApiService {
     // Helper method for making HTTP requests
     async makeRequest(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
+        
+        // Get auth headers if available
+        const authHeaders = window.auth0Service ? window.auth0Service.getAuthHeader() : {};
+        
         const config = {
             headers: {
                 'Content-Type': 'application/json',
+                ...authHeaders,
                 ...options.headers
             },
             ...options
@@ -161,6 +166,55 @@ class ApiService {
             return await this.makeRequest('/lunar');
         } catch (error) {
             console.error('Error fetching lunar information:', error);
+            throw error;
+        }
+    }
+
+    // Auth0 API
+    async fetchAuthStatus() {
+        try {
+            return await this.makeRequest('/auth/status');
+        } catch (error) {
+            console.error('Error fetching auth status:', error);
+            throw error;
+        }
+    }
+
+    async fetchUserInfo() {
+        try {
+            return await this.makeRequest('/auth/user');
+        } catch (error) {
+            console.error('Error fetching user info:', error);
+            throw error;
+        }
+    }
+
+    async fetchUserPreferences() {
+        try {
+            return await this.makeRequest('/auth/user/preferences');
+        } catch (error) {
+            console.error('Error fetching user preferences:', error);
+            throw error;
+        }
+    }
+
+    async updateUserPreferences(preferences) {
+        try {
+            return await this.makeRequest('/auth/user/preferences', {
+                method: 'POST',
+                body: JSON.stringify(preferences)
+            });
+        } catch (error) {
+            console.error('Error updating user preferences:', error);
+            throw error;
+        }
+    }
+
+    async fetchUserSessions() {
+        try {
+            return await this.makeRequest('/auth/user/sessions');
+        } catch (error) {
+            console.error('Error fetching user sessions:', error);
             throw error;
         }
     }

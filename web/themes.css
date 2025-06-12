@@ -275,14 +275,31 @@ button:not(:disabled).bg-blue-600:hover {
   background-color: #e2e8f0 !important;
 }
 
-/* Theme transition for smooth switching - ensure consistency */
+/* Safari-compatible theme transitions - use shorter duration and single property transitions */
 *,
 *::before,
 *::after {
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+  transition: all 0.1s ease !important;
 }
 
-/* Override any conflicting transition timings */
+/* Safari-specific fixes - disable transitions on theme switch to prevent staggered animations */
+@supports (-webkit-appearance: none) {
+  /* Safari detection */
+  [data-theme] *,
+  [data-theme] *::before,
+  [data-theme] *::after {
+    transition: none !important;
+  }
+  
+  /* Re-enable transitions after theme switch with delay */
+  [data-theme].theme-transitioning *,
+  [data-theme].theme-transitioning *::before,
+  [data-theme].theme-transitioning *::after {
+    transition: all 0.05s ease !important;
+  }
+}
+
+/* Specific element transitions for consistent behavior across browsers */
 body,
 html,
 div,
@@ -292,29 +309,23 @@ input,
 h1, h2, h3, h4, h5, h6,
 p,
 svg,
-path,
-.bg-gray-900,
-.bg-gray-800, 
-.bg-gray-700,
-.bg-gray-600,
+path {
+  transition: background-color 0.1s ease, color 0.1s ease, border-color 0.1s ease, fill 0.1s ease !important;
+}
+
+/* Critical UI elements with no transition delay */
 .text-white,
 .text-gray-100,
 .text-gray-300,
 .text-gray-400,
 .text-gray-500,
+.bg-gray-900,
+.bg-gray-800, 
+.bg-gray-700,
+.bg-gray-600,
 .border-gray-700,
-.border-gray-600,
-.transition-colors,
-.hover\:bg-gray-700,
-.hover\:bg-gray-600 {
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, fill 0.15s ease !important;
-}
-
-/* Ensure modals and overlays transition consistently */
-.fixed,
-.absolute,
-.relative {
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+.border-gray-600 {
+  transition: all 0.05s ease !important;
 }
 
 /* Active domain button styling - use same blue as bubbles/buttons */
@@ -340,3 +351,52 @@ path,
   background-color: var(--accent-blue-hover) !important;
   color: #0f172a !important;
 } 
+
+/* Go Premium Button - Colorful Gradient Design */
+button.go-premium-button {
+  position: relative !important;
+  background-color: #18181b !important; /* Dark zinc background for dark theme */
+  border: none !important;
+  overflow: hidden !important;
+  transition: all 0.2s ease !important;
+  color: #ffffff !important;
+}
+
+/* Gradient background effect */
+button.go-premium-button::before {
+  content: '' !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(to right, #6366f1, #8b5cf6, #ec4899) !important; /* indigo -> purple -> pink */
+  opacity: 0.4 !important;
+  filter: blur(1px) !important;
+  transition: opacity 0.5s ease !important;
+  z-index: 1 !important;
+}
+
+button.go-premium-button:hover::before {
+  opacity: 0.8 !important;
+}
+
+/* Content positioning */
+button.go-premium-button > * {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* Light theme adjustments */
+[data-theme="light"] button.go-premium-button,
+.light button.go-premium-button {
+  background-color: #f4f4f5 !important; /* Light zinc background for light theme */
+  color: #18181b !important; /* Dark text for light theme */
+}
+
+[data-theme="light"] button.go-premium-button svg,
+.light button.go-premium-button svg {
+  color: rgba(24, 24, 27, 0.9) !important; /* Dark icon for light theme */
+}
+
+/* Dark theme icon color */
+button.go-premium-button svg {
+  color: rgba(255, 255, 255, 0.9) !important; /* Light icon for dark theme */
+}

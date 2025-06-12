@@ -23,13 +23,19 @@ const MessageContent = ({ content }) => {
                     processed.push(listType === 'ul' ? '</ul>' : '</ol>');
                     inList = false;
                 }
-                processed.push(`<h3 class="text-lg font-semibold mt-0 mb-0 pt-2 text-white">${line.substring(4)}</h3>`);
+                let headerText = line.substring(4)
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold">$1</strong>')
+                    .replace(/\*([^*]+?)\*/g, '<em class="italic">$1</em>');
+                processed.push(`<h3 class="text-lg font-semibold mt-0 mb-0 pt-2 text-white">${headerText}</h3>`);
             } else if (line.startsWith('## ')) {
                 if (inList) {
                     processed.push(listType === 'ul' ? '</ul>' : '</ol>');
                     inList = false;
                 }
-                processed.push(`<h2 class="text-xl font-bold mt-2 mb-0 pt-3 text-white">${line.substring(3)}</h2>`);
+                let headerText = line.substring(3)
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold">$1</strong>')
+                    .replace(/\*([^*]+?)\*/g, '<em class="italic">$1</em>');
+                processed.push(`<h2 class="text-xl font-bold mt-2 mb-0 pt-3 text-white">${headerText}</h2>`);
             }
             // Handle bullet points
             else if (line.match(/^[•\-\*] /)) {
@@ -39,7 +45,9 @@ const MessageContent = ({ content }) => {
                     inList = true;
                     listType = 'ul';
                 }
-                const content = line.substring(2).trim();
+                let content = line.substring(2).trim()
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
+                    .replace(/\*([^*]+?)\*/g, '<em class="italic text-gray-300">$1</em>');
                 processed.push(`<li class="mb-2">${content}</li>`);
             }
             // Handle numbered lists
@@ -50,7 +58,9 @@ const MessageContent = ({ content }) => {
                     inList = true;
                     listType = 'ol';
                 }
-                const content = line.replace(/^\d+\. /, '');
+                let content = line.replace(/^\d+\. /, '')
+                    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
+                    .replace(/\*([^*]+?)\*/g, '<em class="italic text-gray-300">$1</em>');
                 processed.push(`<li class="mb-2">${content}</li>`);
             }
             // Regular text
@@ -68,10 +78,10 @@ const MessageContent = ({ content }) => {
                 if (line.trim() === '') {
                     processed.push('<br>');
                 } else {
-                    // Process inline formatting
+                    // Process inline formatting - handle bold first, then italic to avoid conflicts
                     line = line
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
-                        .replace(/\*(.*?)\*/g, '<em class="italic text-gray-300">$1</em>');
+                        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-white">$1</strong>')
+                        .replace(/\*([^*]+?)\*/g, '<em class="italic text-gray-300">$1</em>');
                     processed.push(`<p class="mb-1 pb-1">${line}</p>`);
                 }
             }
@@ -129,9 +139,9 @@ const ChatArea = ({
     const showSuggestions = isNewSession && !suggestionsDismissed;
 
     return (
-        <>
+        <div className="flex flex-col h-full">
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6 pt-20">
+            <div className="flex-1 overflow-y-auto p-6 pt-20 min-h-0">
                 <div className="max-w-4xl mx-auto space-y-6">
                     {messages.length === 0 ? (
                         <div className="text-center text-gray-400 mt-20">
@@ -197,7 +207,7 @@ const ChatArea = ({
             </div>
 
             {/* Input Area */}
-            <div className="border-t border-gray-700 p-4">
+            <div className="border-t border-gray-700 p-4 flex-shrink-0">
                 <div className="max-w-4xl mx-auto">
                     <form onSubmit={handleSubmit} className="flex space-x-4">
                         <input
@@ -221,7 +231,7 @@ const ChatArea = ({
                     </form>
                 </div>
             </div>
-        </>
+        </div>
     );
 };
 
