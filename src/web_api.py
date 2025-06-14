@@ -7,40 +7,45 @@ Provides REST endpoints for chat functionality while preserving all existing fea
 Enhanced with Auth0 authentication for production deployment.
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+import logging
+import os
+import sys
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-import logging
-import asyncio
-from datetime import datetime
+
+# Load environment variables
+load_dotenv()
 
 # Import existing system components
-import sys
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.main import (
-    rag_system, domain_manager, memory_manager, qa_cache, 
-    command_handler, auth_manager, handle_command, print_stats
+    domain_manager,
+    handle_command,
+    memory_manager,
+    qa_cache,
+    rag_system,
 )
 
 # Import Auth0 components
 from src.core import (
-    Auth0User, get_current_user_optional, get_current_user_required,
-    OptionalUser, RequiredUser, get_user_session_path,
-    user_sync_service, is_auth0_enabled, get_auth0_status
+    Auth0User,
+    OptionalUser,
+    RequiredUser,
+    get_auth0_status,
+    is_auth0_enabled,
+    stripe_service,
+    user_sync_service,
 )
-
-# Import graph and session_manager that are initialized at module level
-def get_graph_and_session_manager():
-    """Get the initialized graph and session_manager from main module."""
-    from src.main import graph, session_manager
-    return graph, session_manager
 from src.utils.logger import logger
-from langchain_core.messages import HumanMessage, AIMessage
 
 # Configure logging for web API
 logging.basicConfig(level=logging.INFO)
@@ -60,9 +65,13 @@ origins = [
     "http://localhost:3000",  # React dev server
     "http://localhost:8080",  # Alternative dev port
     "http://localhost:5173",  # Vite dev server
+    "https://localhost:8443", # HTTPS dev server (frontend)
+    "https://localhost:8001", # HTTPS API server
     "http://127.0.0.1:3000",
     "http://127.0.0.1:8080", 
     "http://127.0.0.1:5173",
+    "https://127.0.0.1:8443", # HTTPS dev server (alternative)
+    "https://127.0.0.1:8001", # HTTPS API server (alternative)
 ]
 
 app.add_middleware(
@@ -77,7 +86,8 @@ app.add_middleware(
 if os.path.exists("web"):
     app.mount("/web", StaticFiles(directory="web", html=True), name="web")
 
-# Pydantic models for API requests/responses
+# ==================== PYDANTIC MODELS ====================
+
 class ChatMessage(BaseModel):
     """Single chat message"""
     role: str  # "user" or "assistant"
@@ -127,8 +137,119 @@ class CommandResponse(BaseModel):
     message: str
     data: Optional[Dict[str, Any]] = None
 
-def get_or_create_session(session_id: Optional[str] = None) -> tuple[str, Dict[str, Any]]:
-    """Get existing session or create new one using UnifiedSessionManager"""
+class ErrorResponse(BaseModel):
+    """Standard error response model"""
+    error: str
+    status_code: int
+    timestamp: datetime
+    path: str
+    message: Optional[str] = None
+
+class SuccessResponse(BaseModel):
+    """Standard success response model"""
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+class UpdateTitleRequest(BaseModel):
+    """Request model for updating session title"""
+    title: str
+
+class SessionHistoryResponse(BaseModel):
+    """Session history response model"""
+    session_id: str
+    messages: List[ChatMessage]
+
+class UserSessionsResponse(BaseModel):
+    """User sessions response model"""
+    sessions: List[Dict[str, Any]]
+    user_id: str
+    timestamp: datetime
+
+class DomainStatusResponse(BaseModel):
+    """Domain status response model"""
+    active_domains: List[str]
+    available_domains: List[str]
+
+class DomainToggleResponse(BaseModel):
+    """Domain toggle response model"""
+    success: bool
+    message: str
+    domain: str
+    enabled: bool
+
+class LunarInfoResponse(BaseModel):
+    """Lunar information response model"""
+    summary: str
+    details: Dict[str, Any]
+
+class AuthStatusResponse(BaseModel):
+    """Authentication status response model"""
+    auth0_enabled: bool
+    status: str
+    timestamp: datetime
+
+class UserInfoResponse(BaseModel):
+    """User information response model"""
+    user: Dict[str, Any]
+    timestamp: datetime
+
+class CreateCheckoutRequest(BaseModel):
+    """Request for creating Stripe checkout session"""
+    plan_type: str  # "monthly" or "lifetime"
+
+class StripeConfigResponse(BaseModel):
+    """Stripe configuration response model"""
+    publishable_key: Optional[str]
+    enabled: bool
+
+class CheckoutSessionResponse(BaseModel):
+    """Checkout session response model"""
+    success: bool
+    checkout_url: str
+    session_id: str
+    customer_id: Optional[str] = None
+
+class SubscriptionsResponse(BaseModel):
+    """User subscriptions response model"""
+    success: bool
+    subscriptions: List[Dict[str, Any]]
+    user_id: str
+
+class WebhookResponse(BaseModel):
+    """Webhook response model"""
+    received: bool
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+class UserPreferencesRequest(BaseModel):
+    """Request model for updating user preferences"""
+    memory_preferences: Optional[Dict[str, Any]] = None
+    active_domains: Optional[List[str]] = None
+    session_settings: Optional[Dict[str, Any]] = None
+
+class VerifySessionResponse(BaseModel):
+    """Verify session response model"""
+    success: bool
+    session_id: Optional[str] = None
+    payment_status: Optional[str] = None
+    customer_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+class CancelSubscriptionRequest(BaseModel):
+    """Cancel subscription request model"""
+    subscription_id: str
+
+# ==================== UTILITY FUNCTIONS ====================
+
+def get_graph_and_session_manager():
+    """Get the initialized graph and session_manager from main module."""
+    from src.main import graph, session_manager
+    return graph, session_manager
+
+def get_or_create_session(session_id: Optional[str] = None, user: Optional[Auth0User] = None) -> tuple[str, Dict[str, Any]]:
+    """Get existing session or create new one using UnifiedSessionManager with user migration support"""
     _, session_manager = get_graph_and_session_manager()
     
     if session_id:
@@ -144,7 +265,64 @@ def get_or_create_session(session_id: Optional[str] = None) -> tuple[str, Dict[s
                 "message_count": len(session_info["state"].get("messages", []))
             }
         else:
-            # Session ID provided but not found - raise error
+            # Session ID provided but not found
+            # If user is authenticated and session_id has user prefix, try to find original session
+            if user and session_id.startswith(f"user_{user.sub.replace('|', '_')}_"):
+                # Extract original session ID
+                user_prefix = f"user_{user.sub.replace('|', '_')}_"
+                original_session_id = session_id[len(user_prefix):]
+                
+                # Try to load original session
+                original_session_info = session_manager.load_session(original_session_id)
+                if original_session_info:
+                    # Check if this session has already been migrated to prevent repeated migrations
+                    original_metadata = original_session_info["state"].get("session_metadata", {})
+                    if original_metadata.get("migrated_to"):
+                        web_logger.info(f"⚠️ Session {original_session_id} already migrated to {original_metadata.get('migrated_to')}")
+                        raise HTTPException(status_code=404, detail=f"Session {session_id} not found (original session already migrated)")
+                    web_logger.info(f"🔄 Migrating session {original_session_id} to user-specific {session_id}")
+                    
+                    # Create new user-specific session with the same state
+                    config = {"configurable": {"thread_id": session_id}}
+                    graph, _ = get_graph_and_session_manager()
+                    graph.update_state(config, original_session_info["state"])
+                    
+                    # CRITICAL: Ensure the migrated session is properly persisted
+                    session_manager.current_thread_id = session_id
+                    
+                    # Force a checkpoint save by updating the state again with metadata
+                    updated_metadata = original_session_info["state"].get("session_metadata", {})
+                    updated_metadata["migrated_from"] = original_session_id
+                    updated_metadata["migrated_at"] = datetime.now().isoformat()
+                    updated_metadata["last_activity"] = datetime.now().isoformat()
+                    
+                    # Update the state with migration metadata to ensure persistence
+                    graph.update_state(config, {"session_metadata": updated_metadata})
+                    
+                    # Mark original session as migrated and archive it
+                    try:
+                        # Update original session to mark it as migrated
+                        original_config = {"configurable": {"thread_id": original_session_id}}
+                        original_updated_metadata = original_metadata.copy()
+                        original_updated_metadata["migrated_to"] = session_id
+                        original_updated_metadata["migrated_at"] = datetime.now().isoformat()
+                        graph.update_state(original_config, {"session_metadata": original_updated_metadata})
+                        
+                        # Archive the original session
+                        session_manager.archive_session(original_session_id)
+                        web_logger.info(f"✅ Original session {original_session_id} marked as migrated and archived")
+                    except Exception as e:
+                        web_logger.warning(f"Could not mark original session {original_session_id} as migrated: {e}")
+                    
+                    return session_id, {
+                        "state": {**original_session_info["state"], "session_metadata": updated_metadata},
+                        "config": config,
+                        "created_at": updated_metadata.get("created_at"),
+                        "last_activity": updated_metadata.get("last_activity"),
+                        "message_count": len(original_session_info["state"].get("messages", []))
+                    }
+            
+            # Session not found and no migration possible
             raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     
     # Create new session only when explicitly requested (first message)
@@ -252,7 +430,7 @@ async def health_check():
         web_logger.error(f"Health check failed: {e}")
         raise HTTPException(status_code=503, detail="Service unhealthy")
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse, status_code=status.HTTP_200_OK)
 async def chat(request: ChatRequest, user: OptionalUser = None):
     """Main chat endpoint - POST only (supports optional authentication)"""
     try:
@@ -261,16 +439,22 @@ async def chat(request: ChatRequest, user: OptionalUser = None):
             # Authenticated user - use user-specific session path
             base_session_id = request.session_id
             if base_session_id:
-                # Prefix session ID with user identifier for isolation
-                session_id = f"user_{user.sub.replace('|', '_')}_{base_session_id}"
+                # Check if session ID is already prefixed to prevent double-prefixing
+                user_prefix = f"user_{user.sub.replace('|', '_')}_"
+                if base_session_id.startswith(user_prefix):
+                    # Already prefixed, use as-is
+                    session_id = base_session_id
+                else:
+                    # Not prefixed, add prefix for isolation
+                    session_id = f"{user_prefix}{base_session_id}"
             else:
                 session_id = None
         else:
             # Anonymous user - use regular session management
             session_id = request.session_id
         
-        # Get or create session
-        session_id, session_data = get_or_create_session(session_id)
+        # Get or create session (with user migration support)
+        session_id, session_data = get_or_create_session(session_id, user)
         current_state = session_data["state"]
         current_config = session_data["config"]
         
@@ -278,7 +462,7 @@ async def chat(request: ChatRequest, user: OptionalUser = None):
         if user:
             await user_sync_service.sync_user(user)
         
-        web_logger.info(f"Processing message for session {session_id[:8]}...")
+        web_logger.debug(f"Processing message for session {session_id[:8]}...")
         
         # Add user message to state
         current_state["messages"].append(HumanMessage(content=request.message))
@@ -383,7 +567,7 @@ async def list_sessions():
         web_logger.error(f"Session listing error: {e}")
         raise HTTPException(status_code=500, detail="Error listing sessions")
 
-@app.get("/sessions/{session_id}/history")
+@app.get("/sessions/{session_id}/history", response_model=SessionHistoryResponse)
 async def get_session_history(session_id: str):
     """Get chat history for a specific session using UnifiedSessionManager"""
     try:
@@ -406,18 +590,18 @@ async def get_session_history(session_id: str):
                     timestamp=datetime.now()  # Note: we don't store timestamps in current system
                 ))
         
-        return {"session_id": session_id, "messages": history}
+        return SessionHistoryResponse(session_id=session_id, messages=history)
     except HTTPException:
         raise
     except Exception as e:
         web_logger.error(f"History retrieval error: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving session history")
 
-@app.put("/sessions/{session_id}/title")
-async def update_session_title(session_id: str, request: dict):
+@app.put("/sessions/{session_id}/title", response_model=SuccessResponse)
+async def update_session_title(session_id: str, request: UpdateTitleRequest):
     """Update session title"""
     try:
-        title = request.get("title", "").strip()
+        title = request.title.strip()
         if not title:
             raise HTTPException(status_code=400, detail="Title cannot be empty")
         
@@ -427,7 +611,7 @@ async def update_session_title(session_id: str, request: dict):
         success = session_manager.update_session_title(session_id, title)
         
         if success:
-            return {"success": True, "message": "Session title updated"}
+            return SuccessResponse(success=True, message="Session title updated")
         else:
             raise HTTPException(status_code=404, detail="Session not found")
             
@@ -437,7 +621,7 @@ async def update_session_title(session_id: str, request: dict):
         web_logger.error(f"Session title update error: {e}")
         raise HTTPException(status_code=500, detail="Error updating session title")
 
-@app.post("/sessions/{session_id}/archive")
+@app.post("/sessions/{session_id}/archive", response_model=SuccessResponse, status_code=status.HTTP_200_OK)
 async def archive_session(session_id: str):
     """Archive a session"""
     try:
@@ -447,7 +631,7 @@ async def archive_session(session_id: str):
         success = session_manager.archive_session(session_id)
         
         if success:
-            return {"success": True, "message": "Session archived"}
+            return SuccessResponse(success=True, message="Session archived")
         else:
             raise HTTPException(status_code=404, detail="Session not found")
             
@@ -487,7 +671,7 @@ async def list_archived_sessions():
         web_logger.error(f"Archived sessions listing error: {e}")
         raise HTTPException(status_code=500, detail="Error listing archived sessions")
 
-@app.post("/sessions/{session_id}/unarchive")
+@app.post("/sessions/{session_id}/unarchive", response_model=SuccessResponse, status_code=status.HTTP_200_OK)
 async def unarchive_session(session_id: str):
     """Unarchive a session (restore to main list)"""
     try:
@@ -497,7 +681,7 @@ async def unarchive_session(session_id: str):
         success = session_manager.unarchive_session(session_id)
         
         if success:
-            return {"success": True, "message": "Session restored"}
+            return SuccessResponse(success=True, message="Session restored")
         else:
             raise HTTPException(status_code=404, detail="Session not found")
             
@@ -507,7 +691,7 @@ async def unarchive_session(session_id: str):
         web_logger.error(f"Session unarchive error: {e}")
         raise HTTPException(status_code=500, detail="Error restoring session")
 
-@app.delete("/sessions/{session_id}")
+@app.delete("/sessions/{session_id}", response_model=SuccessResponse, status_code=status.HTTP_200_OK)
 async def delete_session(session_id: str):
     """Delete a session permanently"""
     try:
@@ -517,7 +701,7 @@ async def delete_session(session_id: str):
         success = session_manager.delete_session(session_id)
         
         if success:
-            return {"success": True, "message": "Session deleted"}
+            return SuccessResponse(success=True, message="Session deleted")
         else:
             raise HTTPException(status_code=404, detail="Session not found")
             
@@ -562,16 +746,20 @@ async def execute_command(request: CommandRequest):
         web_logger.error(f"Command execution error: {e}")
         raise HTTPException(status_code=500, detail=f"Error executing command: {str(e)}")
 
-@app.get("/domains")
+@app.get("/domains", response_model=DomainStatusResponse)
 async def get_domains():
     """Get available and active domains"""
     try:
-        return rag_system.get_domain_status()
+        domain_status = rag_system.get_domain_status()
+        return DomainStatusResponse(
+            active_domains=domain_status.get("active_domains", []),
+            available_domains=domain_status.get("available_domains", [])
+        )
     except Exception as e:
         web_logger.error(f"Domain retrieval error: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving domains")
 
-@app.post("/domains/{domain_name}/toggle")
+@app.post("/domains/{domain_name}/toggle", response_model=DomainToggleResponse)
 async def toggle_domain(domain_name: str, enable: bool = True):
     """Enable or disable a knowledge domain"""
     try:
@@ -582,15 +770,25 @@ async def toggle_domain(domain_name: str, enable: bool = True):
         
         if result:
             action = "enabled" if enable else "disabled"
-            return {"success": True, "message": f"Domain '{domain_name}' {action}"}
+            return DomainToggleResponse(
+                success=True,
+                message=f"Domain '{domain_name}' {action}",
+                domain=domain_name,
+                enabled=enable
+            )
         else:
-            return {"success": False, "message": f"Failed to modify domain '{domain_name}'"}
+            return DomainToggleResponse(
+                success=False,
+                message=f"Failed to modify domain '{domain_name}'",
+                domain=domain_name,
+                enabled=not enable
+            )
             
     except Exception as e:
         web_logger.error(f"Domain toggle error: {e}")
         raise HTTPException(status_code=500, detail=f"Error toggling domain: {str(e)}")
 
-@app.get("/lunar")
+@app.get("/lunar", response_model=LunarInfoResponse)
 async def get_lunar_info():
     """Get current lunar phase information"""
     try:
@@ -599,36 +797,36 @@ async def get_lunar_info():
         summary = get_current_lunar_phase()
         detailed_data = get_current_lunar_data()
         
-        return {
-            "summary": summary,
-            "details": {
+        return LunarInfoResponse(
+            summary=summary,
+            details={
                 "date": detailed_data.date.isoformat(),
                 "phase": detailed_data.phase.value,
                 "illumination_percentage": round(detailed_data.illumination_percentage, 1),
                 "days_from_new_moon": round(detailed_data.days_from_new_moon, 1),
                 "days_to_full_moon": round(detailed_data.days_to_full_moon, 1)
             }
-        }
+        )
     except Exception as e:
         web_logger.error(f"Lunar info error: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving lunar information")
 
 # ==================== AUTH0 ENDPOINTS ====================
 
-@app.get("/auth/status")
+@app.get("/auth/status", response_model=AuthStatusResponse)
 async def get_auth_status():
     """Get authentication system status"""
-    return {
-        "auth0_enabled": is_auth0_enabled(),
-        "status": get_auth0_status(),
-        "timestamp": datetime.now().isoformat()
-    }
+    return AuthStatusResponse(
+        auth0_enabled=is_auth0_enabled(),
+        status=get_auth0_status(),
+        timestamp=datetime.now()
+    )
 
-@app.get("/auth/user")
+@app.get("/auth/user", response_model=UserInfoResponse)
 async def get_current_user_info(user: RequiredUser):
     """Get current authenticated user information (protected endpoint)"""
-    return {
-        "user": {
+    return UserInfoResponse(
+        user={
             "id": user.sub,
             "email": user.email,
             "name": user.name,
@@ -641,25 +839,90 @@ async def get_current_user_info(user: RequiredUser):
             "active_domains": user.active_domains,
             "session_settings": user.session_settings,
         },
-        "timestamp": datetime.now().isoformat()
-    }
+        timestamp=datetime.now()
+    )
 
-@app.put("/auth/user/preferences")
-async def update_user_preferences(user: RequiredUser, preferences: dict):
+@app.get("/auth/debug")
+async def debug_auth_token(request: Request):
+    """Debug endpoint to check JWT token format and validation"""
+    try:
+        # Get Authorization header
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            return {
+                "error": "No Authorization header found",
+                "headers": dict(request.headers),
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        if not auth_header.startswith("Bearer "):
+            return {
+                "error": "Invalid Authorization header format",
+                "auth_header": auth_header[:50] + "..." if len(auth_header) > 50 else auth_header,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        token = auth_header[7:]  # Remove "Bearer " prefix
+        
+        # Check token format
+        token_parts = token.split('.')
+        is_jwt = len(token_parts) == 3
+        
+        debug_info = {
+            "token_received": True,
+            "token_length": len(token),
+            "token_format": "JWT" if is_jwt else "Opaque",
+            "token_parts": len(token_parts),
+            "token_preview": token[:50] + "..." if len(token) > 50 else token,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if is_jwt:
+            try:
+                # Try to decode header without verification
+                from src.core.auth0_validator import _get_unverified_header
+                header = _get_unverified_header(token)
+                debug_info["jwt_header"] = header
+                debug_info["has_kid"] = "kid" in header
+            except Exception as header_error:
+                debug_info["header_decode_error"] = str(header_error)
+        
+        # Try to validate with our validator
+        try:
+            from src.core.auth0_validator import auth0_validator
+            if auth0_validator:
+                user = await auth0_validator.validate_token(token)
+                debug_info["validation_success"] = True
+                debug_info["user_sub"] = user.sub
+                debug_info["user_email"] = user.email
+            else:
+                debug_info["validation_error"] = "Auth0 validator not initialized"
+        except Exception as validation_error:
+            debug_info["validation_error"] = str(validation_error)
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": f"Debug endpoint error: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.put("/auth/user/preferences", response_model=SuccessResponse)
+async def update_user_preferences(user: RequiredUser, preferences: UserPreferencesRequest):
     """Update user preferences (protected endpoint)"""
     try:
         success = await user_sync_service.update_user_metadata(user, {
-            "memory_preferences": preferences.get("memory_preferences", {}),
-            "active_domains": preferences.get("active_domains", []),
-            "session_settings": preferences.get("session_settings", {})
+            "memory_preferences": preferences.memory_preferences or {},
+            "active_domains": preferences.active_domains or [],
+            "session_settings": preferences.session_settings or {}
         })
         
         if success:
-            return {
-                "success": True,
-                "message": "User preferences updated",
-                "timestamp": datetime.now().isoformat()
-            }
+            return SuccessResponse(
+                success=True,
+                message="User preferences updated"
+            )
         else:
             raise HTTPException(status_code=500, detail="Failed to update preferences")
             
@@ -667,7 +930,7 @@ async def update_user_preferences(user: RequiredUser, preferences: dict):
         web_logger.error(f"Preference update error: {e}")
         raise HTTPException(status_code=500, detail="Error updating user preferences")
 
-@app.get("/auth/user/sessions")
+@app.get("/auth/user/sessions", response_model=UserSessionsResponse)
 async def get_user_sessions(user: RequiredUser):
     """Get sessions for authenticated user (protected endpoint)"""
     try:
@@ -700,11 +963,11 @@ async def get_user_sessions(user: RequiredUser):
                     "domains": session.get("domains_used", [])
                 })
         
-        return {
-            "sessions": user_sessions,
-            "user_id": user.sub,
-            "timestamp": datetime.now().isoformat()
-        }
+        return UserSessionsResponse(
+            sessions=user_sessions,
+            user_id=user.sub,
+            timestamp=datetime.now()
+        )
         
     except Exception as e:
         web_logger.error(f"User sessions error: {e}")
@@ -715,7 +978,7 @@ async def get_user_sessions(user: RequiredUser):
 async def execute_admin_command(request: CommandRequest, user: RequiredUser):
     """Execute system command (protected endpoint - requires authentication)"""
     try:
-        web_logger.info(f"Admin command from user {user.sub}: {request.command}")
+        web_logger.debug(f"Admin command from user {user.sub}: {request.command}")
         
         # Execute command using existing command handler
         result = handle_command(request.command)
@@ -735,32 +998,223 @@ async def execute_admin_command(request: CommandRequest, user: RequiredUser):
 
 # Error handlers
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
+async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions with proper JSON responses"""
+    error_response = ErrorResponse(
+        error=exc.detail,
+        status_code=exc.status_code,
+        timestamp=datetime.now(),
+        path=str(request.url.path),
+        message="HTTP error occurred"
+    )
+    
     return JSONResponse(
         status_code=exc.status_code,
         content={
-            "error": exc.detail,
-            "status_code": exc.status_code,
-            "timestamp": datetime.now().isoformat(),
-            "path": str(request.url.path)
+            "error": error_response.error,
+            "status_code": error_response.status_code,
+            "timestamp": error_response.timestamp.isoformat(),
+            "path": error_response.path,
+            "message": error_response.message
         }
     )
 
 @app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
+async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected errors with proper logging and response"""
     web_logger.error(f"Unhandled error on {request.url.path}: {exc}")
+    
+    error_response = ErrorResponse(
+        error="Internal server error",
+        status_code=500,
+        timestamp=datetime.now(),
+        path=str(request.url.path),
+        message="An unexpected error occurred. Please try again later."
+    )
+    
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal server error",
-            "status_code": 500,
-            "timestamp": datetime.now().isoformat(),
-            "path": str(request.url.path),
-            "message": "An unexpected error occurred. Please try again later."
+            "error": error_response.error,
+            "status_code": error_response.status_code,
+            "timestamp": error_response.timestamp.isoformat(),
+            "path": error_response.path,
+            "message": error_response.message
         }
     )
+
+# ============================================================================
+# STRIPE PAYMENT ENDPOINTS
+# ============================================================================
+
+@app.get("/stripe/config", response_model=StripeConfigResponse)
+async def get_stripe_config():
+    """Get Stripe configuration for frontend"""
+    config = stripe_service.get_config()
+    return StripeConfigResponse(
+        publishable_key=config.get("publishable_key"),
+        enabled=config.get("enabled", False)
+    )
+
+@app.post("/stripe/create-checkout-session", response_model=CheckoutSessionResponse, status_code=status.HTTP_201_CREATED)
+async def create_checkout_session(
+    request: CreateCheckoutRequest,
+    user: RequiredUser
+):
+    """Create Stripe checkout session for authenticated user"""
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required for premium upgrade"
+        )
+    
+    # Determine base URL from environment or request headers
+    base_url = os.getenv('FRONTEND_URL', 'https://mystical-mentor.beautiful-apps.com')
+    
+    # Fallback to localhost for development
+    if not base_url or base_url == 'localhost':
+        base_url = "https://localhost:8443"
+    
+    success_url = f"{base_url}?payment=success&plan={request.plan_type}"
+    cancel_url = f"{base_url}?payment=canceled"
+    
+    try:
+        # Context7 Best Practice: Stripe Python client is synchronous
+        session_data = stripe_service.create_checkout_session(
+            plan_type=request.plan_type,
+            user_email=user.email or "user@example.com",
+            auth0_user_id=user.sub,
+            success_url=success_url,
+            cancel_url=cancel_url
+        )
+        
+        logger.debug(f"✅ Checkout session created for user {user.sub}: {session_data['session_id']}")
+        
+        return CheckoutSessionResponse(
+            success=True,
+            checkout_url=session_data["url"],
+            session_id=session_data["session_id"],
+            customer_id=session_data.get("customer_id")
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions from stripe_service
+        raise
+    except Exception as e:
+        logger.error(f"❌ Unexpected error creating checkout session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create payment session"
+        )
+
+@app.get("/stripe/subscriptions", response_model=SubscriptionsResponse)
+async def get_user_subscriptions(user: RequiredUser):
+    """Get user's Stripe subscriptions"""
+    try:
+        subscriptions = stripe_service.get_customer_subscriptions(
+            customer_email=user.email or "user@example.com"
+        )
+        
+        return SubscriptionsResponse(
+            success=True,
+            subscriptions=[sub.dict() for sub in subscriptions],
+            user_id=user.sub
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error fetching user subscriptions: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch subscription information"
+        )
+
+@app.post("/stripe/webhook", response_model=WebhookResponse, status_code=status.HTTP_200_OK)
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events with enhanced processing"""
+    try:
+        # Get raw payload and signature
+        payload = await request.body()
+        signature = request.headers.get("stripe-signature")
+        
+        if not signature:
+            logger.warning("Webhook received without Stripe signature")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing Stripe signature"
+            )
+        
+        # Process webhook (now returns detailed result instead of raising exceptions)
+        result = stripe_service.handle_webhook(payload, signature)
+        
+        # Log webhook processing result
+        if result.get("status") == "processed":
+            logger.debug(f"🔔 Webhook processed successfully: {result.get('event_type')}")
+        elif result.get("status") == "ignored":
+            logger.debug(f"🔔 Webhook ignored: {result.get('reason')}")
+        elif result.get("status") == "error":
+            logger.error(f"🔔 Webhook processing error: {result.get('reason')}")
+        
+        # Always return 200 to Stripe (Context7 best practice)
+        return WebhookResponse(received=True, result=result)
+        
+    except Exception as e:
+        logger.error(f"❌ Webhook processing failed: {e}")
+        # Still return 200 to prevent Stripe retries for non-recoverable errors
+        return WebhookResponse(received=True, error=str(e))
+
+@app.get("/stripe/verify-session/{session_id}", response_model=VerifySessionResponse)
+async def verify_checkout_session(session_id: str):
+    """Verify a Stripe checkout session for security"""
+    try:
+        result = stripe_service.verify_session(session_id)
+        
+        if result.get("success"):
+            return VerifySessionResponse(
+                success=True,
+                session_id=result.get("session_id"),
+                payment_status=result.get("payment_status"),
+                customer_id=result.get("customer_id"),
+                metadata=result.get("metadata", {})
+            )
+        else:
+            return VerifySessionResponse(
+                success=False,
+                error=result.get("error", "Session verification failed")
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Error verifying session {session_id}: {e}")
+        return VerifySessionResponse(
+            success=False,
+            error="Session verification failed"
+        )
+
+@app.post("/stripe/cancel-subscription", response_model=SuccessResponse)
+async def cancel_user_subscription(user: RequiredUser, request: CancelSubscriptionRequest):
+    """Cancel user's subscription"""
+    try:
+        success = stripe_service.cancel_subscription(request.subscription_id)
+        
+        if success:
+            return SuccessResponse(
+                success=True,
+                message="Subscription will be canceled at the end of the current period",
+                data={"subscription_id": request.subscription_id}
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to cancel subscription"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error canceling subscription: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to cancel subscription"
+        )
 
 if __name__ == "__main__":
     import uvicorn

@@ -61,7 +61,7 @@ class CircuitBreaker:
         if self.state == CircuitState.OPEN:
             if self._should_attempt_reset():
                 self.state = CircuitState.HALF_OPEN
-                logger.info("🔄 Circuit breaker: Attempting recovery")
+                logger.debug("🔄 Circuit breaker: Attempting recovery")
             else:
                 raise Exception(f"Circuit breaker OPEN - service unavailable (last failure: {self.last_failure_time})")
         
@@ -82,7 +82,7 @@ class CircuitBreaker:
     def _on_success(self):
         """Handle successful operation."""
         if self.state == CircuitState.HALF_OPEN:
-            logger.info("✅ Circuit breaker: Service recovered")
+            logger.debug("✅ Circuit breaker: Service recovered")
         self.failure_count = 0
         self.state = CircuitState.CLOSED
     
@@ -244,7 +244,7 @@ class GracefulDegradation:
             # Try fallback
             fallback_func = self.fallback_strategies.get(service_name)
             if fallback_func:
-                logger.info(f"🔄 Using fallback for {service_name}")
+                logger.debug(f"🔄 Using fallback for {service_name}")
                 try:
                     return fallback_func(*args, **kwargs)
                 except Exception as fallback_error:

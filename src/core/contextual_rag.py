@@ -20,7 +20,7 @@ from langchain_core.documents import Document
 
 from .stats_collector import StatsCollector
 from .resilience_manager import resilience_manager
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 class OptimizedContextualRAGSystem:

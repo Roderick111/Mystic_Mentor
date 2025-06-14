@@ -30,7 +30,6 @@ sys.path.insert(0, str(current_dir))
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
-from core.auth_manager import AuthenticationManager
 from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
@@ -55,9 +54,6 @@ rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)
 
 # Initialize memory manager with stats collector
 memory_manager = MemoryManager(llm, rag_system.stats_collector)
-
-# Initialize authentication manager
-auth_manager = AuthenticationManager()
 
 # Session manager will be initialized after graph compilation
 
@@ -406,7 +402,6 @@ command_handler.register_dependencies(
     qa_cache=qa_cache,
     memory_manager=memory_manager,
     session_manager=session_manager,
-    auth_manager=auth_manager,
     print_stats=print_stats,
     set_debug_mode=set_debug_mode
 )
@@ -421,52 +416,11 @@ def authenticate_user():
     print("Commands: 'auth login', 'auth register', 'exit'")
     print()
     
-    while True:
-        try:
-            command = input("Auth> ").strip()
-            
-            if command == "exit":
-                print("Bye...")
-                return False
-            
-            # Handle auth commands
-            if command in ["auth login", "auth register"]:
-                result = command_handler.handle_command(command, {})
-                
-                # Check if authentication was successful
-                if auth_manager.is_authenticated():
-                    return True
-                    
-            elif command == "auth status":
-                command_handler.handle_command(command, {})
-            
-            elif command == "user list":
-                command_handler.handle_command(command, {})
-                
-            else:
-                print("❌ Unknown command. Available: 'auth login', 'auth register', 'user list', 'exit'")
-                
-        except KeyboardInterrupt:
-            print("\nBye...")
-            return False
-        except Exception as e:
-            logger.error(f"Authentication error: {e}")
+   
 
 def run_chatbot():
     """Main chatbot loop with unified session management."""
     
-    # TEMPORARY: Skip authentication for development
-    # TODO: Re-enable authentication for production
-    # 
-    # To re-enable authentication, replace the code below with:
-    #   if not authenticate_user():
-    #       return
-    #   user_db_path = auth_manager.get_user_session_path()
-    #   checkpointer = SqliteSaver(sqlite3.connect(user_db_path, check_same_thread=False))
-    #   session_manager = UnifiedSessionManager(checkpointer, graph)
-    #   command_handler.session_manager = session_manager
-    #
-    print("🔧 Development Mode: Authentication temporarily disabled")
     
     # Use default session manager (already initialized)
     global session_manager, checkpointer

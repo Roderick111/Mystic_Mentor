@@ -103,6 +103,30 @@ const useAppLogic = () => {
         }
     };
 
+    // Handle payment results on page load
+    useEffect(() => {
+        const handlePaymentResults = async () => {
+            try {
+                // Wait for stripe service to initialize
+                await window.stripeService?.initPromise;
+                
+                const paymentResult = await window.stripeService?.handlePaymentResult();
+                if (paymentResult) {
+                    if (paymentResult.status === 'success') {
+                        alert(`🎉 ${paymentResult.message}\n\nWelcome to Premium! Your enhanced spiritual journey begins now.`);
+                    } else if (paymentResult.status === 'canceled') {
+                        // Optionally show a more subtle notification
+                        console.log('Payment canceled by user');
+                    }
+                }
+            } catch (error) {
+                console.error('Error handling payment result:', error);
+            }
+        };
+
+        handlePaymentResults();
+    }, []);
+
     // Initial data load
     useEffect(() => {
         fetchSystemStatus();

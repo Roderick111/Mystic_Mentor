@@ -1,8 +1,85 @@
 /**
  * PremiumModal.js - Premium Plan Comparison Modal
  * Purpose: Shows pricing comparison and premium benefits when user clicks Go Premium
+ * Updated: Following Context7 React and Stripe best practices
  */
+
+// Context7 Best Practice: Proper React hook usage
+const { useState, useEffect, useCallback } = React;
+
 const PremiumModal = ({ isOpen, onClose }) => {
+    const { isAuthenticated, user } = useAuth();
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [processingPlan, setProcessingPlan] = useState(null);
+    const [error, setError] = useState(null);
+    const [stripeReady, setStripeReady] = useState(false);
+    
+    // Context7 Best Practice: Memoized function to avoid recreating on each render
+    const checkStripeAvailability = useCallback(async () => {
+        try {
+            const isEnabled = await window.stripeService.isEnabled();
+            setStripeReady(isEnabled);
+            if (!isEnabled) {
+                setError('Payment processing is temporarily unavailable. Please try again later.');
+            }
+        } catch (err) {
+            console.error('Stripe availability check failed:', err);
+            setStripeReady(false);
+            setError('Payment system unavailable. Please try again later.');
+        }
+    }, []);
+
+    // Context7 Best Practice: Check Stripe availability on mount
+    useEffect(() => {
+        if (isOpen) {
+            checkStripeAvailability();
+        }
+    }, [isOpen, checkStripeAvailability]);
+
+    // Context7 Best Practice: Clear error when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            setError(null);
+            setIsProcessing(false);
+            setProcessingPlan(null);
+        }
+    }, [isOpen]);
+
+    // Context7 Best Practice: Keyboard navigation support
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
+    // Context7 Best Practice: Memoized button state calculation
+    const getButtonState = useCallback((planType) => {
+        if (!isAuthenticated) {
+            return { disabled: true, text: 'Sign in required' };
+        }
+        if (!stripeReady) {
+            return { disabled: true, text: 'Payment unavailable' };
+        }
+        if (isProcessing && processingPlan === planType) {
+            return { disabled: true, text: 'Processing...' };
+        }
+        if (isProcessing) {
+            return { disabled: true, text: planType === 'monthly' ? 'Start Your Premium Journey' : 'Get Lifetime' };
+        }
+        return { 
+            disabled: false, 
+            text: planType === 'monthly' ? 'Start Your Premium Journey' : 'Get Lifetime' 
+        };
+    }, [isAuthenticated, stripeReady, isProcessing, processingPlan]);
+
+    // Context7 Best Practice: Early return AFTER all hooks
     if (!isOpen) return null;
 
     const premiumFeatures = [
@@ -50,22 +127,67 @@ const PremiumModal = ({ isOpen, onClose }) => {
         "Access to 3 basic domains"
     ];
 
-    const handleUpgrade = (planType = 'monthly') => {
-        // TODO: Integrate with actual payment system
-        console.log(`Starting ${planType} premium upgrade process...`);
-        // This would typically redirect to Stripe, PayPal, etc.
-        if (planType === 'lifetime') {
-            alert('Lifetime Premium upgrade coming soon! Thank you for being an early believer.');
-        } else {
-            alert('Monthly Premium upgrade coming soon! Thank you for your interest.');
+    // Context7 Best Practice: Enhanced error handling with specific error types
+    const handleUpgrade = async (planType = 'monthly') => {
+        // Context7 Best Practice: Prevent double-clicks during processing
+        if (isProcessing) {
+            return;
         }
-        onClose();
+
+        // Clear any previous errors
+        setError(null);
+        setIsProcessing(true);
+        setProcessingPlan(planType);
+        
+        try {
+            // Context7 Best Practice: Validate prerequisites before proceeding
+            if (!isAuthenticated || !user) {
+                throw new Error('AUTHENTICATION_REQUIRED');
+            }
+            
+            if (!stripeReady) {
+                throw new Error('STRIPE_NOT_AVAILABLE');
+            }
+            
+            // Context7 Best Practice: Validate plan type
+            if (!['monthly', 'lifetime'].includes(planType)) {
+                throw new Error('INVALID_PLAN_TYPE');
+            }
+            
+            // Context7 Best Practice: Create checkout session with proper error handling
+            await window.stripeService.createCheckoutSession(planType);
+            
+        } catch (error) {
+            console.error('Payment error:', error);
+            
+            // Context7 Best Practice: User-friendly error messages based on error type
+            const errorMessages = {
+                'AUTHENTICATION_REQUIRED': 'Please sign in to upgrade to premium',
+                'STRIPE_NOT_AVAILABLE': 'Payment processing is temporarily unavailable. Please try again later.',
+                'INVALID_PLAN_TYPE': 'Invalid subscription plan selected. Please try again.',
+                'NETWORK_ERROR': 'Connection error. Please check your internet connection and try again.',
+                'CHECKOUT_SESSION_FAILED': 'Unable to start checkout process. Please try again.',
+                'STRIPE_NOT_AVAILABLE': 'Payment system is currently unavailable. Please try again later.'
+            };
+            
+            const errorCode = error.code || error.message;
+            const userMessage = errorMessages[errorCode] || 'Failed to start payment process. Please try again.';
+            
+            setError(userMessage);
+        } finally {
+            setIsProcessing(false);
+            setProcessingPlan(null);
+        }
     };
 
     return (
         <div 
             className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[9999] p-3"
             onClick={onClose}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="premium-modal-title"
+            aria-describedby="premium-modal-description"
         >
             <div 
                 className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 dark:border-gray-700"
@@ -76,19 +198,30 @@ const PremiumModal = ({ isOpen, onClose }) => {
                     <button
                         onClick={onClose}
                         className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl transition-colors"
+                        aria-label="Close premium modal"
                     >
                         ×
                     </button>
                     <div className="mb-4">
                         <div className="text-3xl mb-2">🔮</div>
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                        <h2 id="premium-modal-title" className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                             Unlock Your Full Mystic Potential
                         </h2>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 max-w-sm mx-auto">
+                        <p id="premium-modal-description" className="text-sm text-gray-600 dark:text-gray-300 max-w-sm mx-auto">
                             Transform your spiritual journey with unlimited access to advanced mystical guidance
                         </p>
                     </div>
                 </div>
+
+                {/* Context7 Best Practice: Error Display */}
+                {error && (
+                    <div className="mx-6 mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <div className="text-red-500 text-sm">⚠️</div>
+                            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Primary Monthly Offer */}
                 <div className="px-6 pb-4">
@@ -100,9 +233,15 @@ const PremiumModal = ({ isOpen, onClose }) => {
                             </div>
                             <button
                                 onClick={() => handleUpgrade('monthly')}
-                                className="bg-white text-purple-600 font-bold py-3 px-6 rounded-lg hover:bg-gray-50 transition-all duration-200 transform hover:scale-105 shadow-lg text-sm mb-3 w-full"
+                                disabled={getButtonState('monthly').disabled}
+                                className={`bg-white text-purple-600 font-bold py-3 px-6 rounded-lg transition-all duration-200 shadow-lg text-sm mb-3 w-full ${
+                                    getButtonState('monthly').disabled
+                                        ? 'opacity-50 cursor-not-allowed' 
+                                        : 'hover:bg-gray-50 transform hover:scale-105'
+                                }`}
+                                aria-describedby={error ? 'error-message' : undefined}
                             >
-                                Start Your Premium Journey
+                                {getButtonState('monthly').text}
                             </button>
                             <p className="text-xs opacity-80">
                                 Cancel anytime • 30-day money-back guarantee
@@ -131,9 +270,15 @@ const PremiumModal = ({ isOpen, onClose }) => {
                             </div>
                             <button
                                 onClick={() => handleUpgrade('lifetime')}
-                                className="bg-amber-500 text-white font-semibold py-2 px-4 rounded-lg hover:bg-amber-600 transition-all duration-200 text-sm"
+                                disabled={getButtonState('lifetime').disabled}
+                                className={`bg-amber-500 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 text-sm ${
+                                    getButtonState('lifetime').disabled
+                                        ? 'opacity-50 cursor-not-allowed' 
+                                        : 'hover:bg-amber-600'
+                                }`}
+                                aria-describedby={error ? 'error-message' : undefined}
                             >
-                                Get Lifetime
+                                {getButtonState('lifetime').text}
                             </button>
                         </div>
                     </div>
@@ -145,10 +290,10 @@ const PremiumModal = ({ isOpen, onClose }) => {
                         <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 text-center">
                             You're currently limited by:
                         </h3>
-                        <div className="space-y-2">
+                        <div className="space-y-2" role="list">
                             {limitations.map((limitation, index) => (
-                                <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full flex-shrink-0"></div>
+                                <div key={index} className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400" role="listitem">
+                                    <div className="w-1.5 h-1.5 bg-red-400 rounded-full flex-shrink-0" aria-hidden="true"></div>
                                     <span>{limitation}</span>
                                 </div>
                             ))}
@@ -161,10 +306,16 @@ const PremiumModal = ({ isOpen, onClose }) => {
                     <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 text-center">
                         Unlock Everything With Premium
                     </h3>
-                    <div className="space-y-3">
+                    <div className="space-y-3" role="list">
                         {premiumFeatures.map((feature, index) => (
-                            <div key={index} className={`flex items-start gap-3 p-3 rounded-lg transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700/30 ${feature.highlight ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700' : ''}`}>
-                                <div className="text-lg flex-shrink-0 mt-0.5">{feature.icon}</div>
+                            <div 
+                                key={index} 
+                                className={`flex items-start gap-3 p-3 rounded-lg transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700/30 ${
+                                    feature.highlight ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-700' : ''
+                                }`}
+                                role="listitem"
+                            >
+                                <div className="text-lg flex-shrink-0 mt-0.5" aria-hidden="true">{feature.icon}</div>
                                 <div className="flex-1">
                                     <h4 className="font-semibold text-gray-900 dark:text-white mb-1 text-sm">
                                         {feature.title}
@@ -174,7 +325,7 @@ const PremiumModal = ({ isOpen, onClose }) => {
                                     </p>
                                 </div>
                                 {feature.highlight && (
-                                    <div className="text-purple-500 flex-shrink-0">
+                                    <div className="text-purple-500 flex-shrink-0" aria-hidden="true">
                                         <svg className="w-4 h-4 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                                             <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                         </svg>

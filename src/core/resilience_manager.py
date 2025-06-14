@@ -12,13 +12,13 @@ Separated from main RAG logic for clean architecture.
 """
 
 from typing import Dict, Any, Optional, Callable
-from utils.resilience import (
+from src.utils.resilience import (
     openai_circuit_breaker, 
     chromadb_circuit_breaker,
     health_checker,
     graceful_degradation
 )
-from utils.logger import logger
+from src.utils.logger import logger
 
 class ResilienceManager:
     """

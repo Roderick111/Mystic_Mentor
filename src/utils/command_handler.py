@@ -35,7 +35,6 @@ class CommandHandler:
         self.qa_cache = None
         self.memory_manager = None
         self.session_manager = None
-        self.auth_manager = None
         self.print_stats = None
         self.set_debug_mode = None
     
@@ -68,10 +67,6 @@ class CommandHandler:
         # Handle session commands
         if user_input.startswith("session "):
             return self._handle_session_commands(user_input, state)
-        
-        # Handle auth commands
-        if user_input.startswith("auth ") or user_input.startswith("user "):
-            return self._handle_auth_commands(user_input, state)
         
         # Handle prefix commands (like "domains enable/disable")
         handled = self._handle_prefix_commands(user_input, state)
@@ -106,27 +101,6 @@ class CommandHandler:
         elif user_input.startswith("memory disable "):
             memory_type = user_input.replace("memory disable ", "").strip()
             return self._handle_memory_disable(memory_type, state)
-        
-        return False
-    
-    def _handle_auth_commands(self, command: str, state: dict) -> bool:
-        """Handle authentication commands."""
-        if not self.auth_manager:
-            print("🔒 Authentication not initialized")
-            return True
-            
-        if command == "auth login":
-            return self._handle_auth_login()
-        elif command == "auth register":
-            return self._handle_auth_register()
-        elif command.startswith("user register "):
-            username = command.replace("user register ", "").strip()
-            return self._handle_user_register(username)
-        elif command.startswith("user delete "):
-            username = command.replace("user delete ", "").strip()
-            return self._handle_user_delete(username)
-        elif command == "user list":
-            return self._handle_user_list()
         
         return False
     
@@ -178,10 +152,6 @@ class CommandHandler:
         # Debug Commands
         self.register_command("debug on", self._cmd_debug_on, "Enable debug mode")
         self.register_command("debug off", self._cmd_debug_off, "Disable debug mode")
-        
-        # Authentication Commands
-        self.register_command("auth status", self._cmd_auth_status, "Show authentication status")
-        self.register_command("auth logout", self._cmd_auth_logout, "Logout current user")
     
     # ===================
     # Command Implementations
@@ -240,31 +210,6 @@ class CommandHandler:
         """Disable debug mode."""
         if self.set_debug_mode:
             self.set_debug_mode(False)
-    
-    def _cmd_auth_status(self, state: dict):
-        """Show authentication status."""
-        if not self.auth_manager:
-            print("🔒 Authentication not initialized")
-            return
-        
-        if self.auth_manager.is_authenticated():
-            user = self.auth_manager.get_current_user()
-            print(f"🔐 Logged in as: {user.username}")
-            print(f"📅 Last login: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(user.last_login))}")
-        else:
-            print("🔒 Not authenticated")
-    
-    def _cmd_auth_logout(self, state: dict):
-        """Logout current user."""
-        if not self.auth_manager:
-            print("🔒 Authentication not initialized")
-            return
-        
-        if self.auth_manager.is_authenticated():
-            self.auth_manager.logout()
-            print("👋 Logged out successfully")
-        else:
-            print("🔒 Not currently logged in")
     
     # ===================
     # Prefix Command Handlers
@@ -394,138 +339,6 @@ class CommandHandler:
         if success:
             logger.debug("Session state cleanup completed")
         
-        return True
-    
-    # ===================
-    # Authentication Command Handlers
-    # ===================
-    
-    def _handle_auth_login(self) -> bool:
-        """Handle 'auth login' command."""
-        try:
-            username = input("Username: ").strip()
-            if not username:
-                print("❌ Username cannot be empty")
-                return True
-            
-            password = getpass.getpass("Password: ")
-            if not password:
-                print("❌ Password cannot be empty")
-                return True
-            
-            success, message = self.auth_manager.login(username, password)
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"❌ {message}")
-                
-        except KeyboardInterrupt:
-            print("\n❌ Login cancelled")
-        except Exception as e:
-            logger.error(f"Login error: {e}")
-            
-        return True
-    
-    def _handle_auth_register(self) -> bool:
-        """Handle 'auth register' command."""
-        try:
-            print("📝 User Registration")
-            username = input("Username (min 3 chars): ").strip()
-            if not username:
-                print("❌ Username cannot be empty")
-                return True
-            
-            password = getpass.getpass("Password (min 6 chars): ")
-            if not password:
-                print("❌ Password cannot be empty")
-                return True
-            
-            password_confirm = getpass.getpass("Confirm password: ")
-            if password != password_confirm:
-                print("❌ Passwords do not match")
-                return True
-            
-            success, message = self.auth_manager.register_user(username, password)
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"❌ {message}")
-                
-        except KeyboardInterrupt:
-            print("\n❌ Registration cancelled")
-        except Exception as e:
-            logger.error(f"Registration error: {e}")
-            
-        return True
-    
-    def _handle_user_register(self, username: str) -> bool:
-        """Handle 'user register <username>' command (admin function)."""
-        if not username:
-            print("❌ Username required")
-            return True
-        
-        try:
-            password = getpass.getpass(f"Password for '{username}': ")
-            if not password:
-                print("❌ Password cannot be empty")
-                return True
-            
-            success, message = self.auth_manager.register_user(username, password)
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"❌ {message}")
-                
-        except KeyboardInterrupt:
-            print("\n❌ Registration cancelled")
-        except Exception as e:
-            logger.error(f"Registration error: {e}")
-            
-        return True
-    
-    def _handle_user_delete(self, username: str) -> bool:
-        """Handle 'user delete <username>' command (admin function)."""
-        if not username:
-            print("❌ Username required")
-            return True
-        
-        try:
-            confirm = input(f"Delete user '{username}'? This will remove all their data. [y/N]: ").strip().lower()
-            if confirm not in ['y', 'yes']:
-                print("❌ User deletion cancelled")
-                return True
-            
-            success, message = self.auth_manager.delete_user(username)
-            if success:
-                print(f"✅ {message}")
-            else:
-                print(f"❌ {message}")
-                
-        except KeyboardInterrupt:
-            print("\n❌ Deletion cancelled")
-        except Exception as e:
-            logger.error(f"User deletion error: {e}")
-            
-        return True
-    
-    def _handle_user_list(self) -> bool:
-        """Handle 'user list' command (admin function)."""
-        try:
-            users = self.auth_manager.list_users()
-            if users:
-                print("👥 Registered Users:")
-                for username, info in users.items():
-                    status = "✅ Active" if info['is_active'] else "❌ Disabled"
-                    created = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['created_at']))
-                    last_login = "Never" if info['last_login'] == 0 else time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(info['last_login']))
-                    print(f"  • {username} - {status}")
-                    print(f"    Created: {created}, Last login: {last_login}")
-            else:
-                print("👥 No users registered")
-                
-        except Exception as e:
-            logger.error(f"User list error: {e}")
-            
         return True
     
     def get_available_commands(self) -> Dict[str, str]:

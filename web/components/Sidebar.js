@@ -103,13 +103,13 @@ const Sidebar = ({
                         />
                     </div>
                 ) : (
-                    <button
-                        onClick={() => onLoadSession(session.session_id)}
-                        className={`w-full text-left p-2 rounded text-sm hover:bg-gray-700 transition-colors ${
-                            currentSessionId === session.session_id ? 'bg-gray-700' : ''
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
+                    <div className="flex items-center rounded text-sm hover:bg-gray-700 transition-colors">
+                        <button
+                            onClick={() => onLoadSession(session.session_id)}
+                            className={`flex-1 text-left p-2 ${
+                                currentSessionId === session.session_id ? 'bg-gray-700 rounded' : ''
+                            }`}
+                        >
                             <div className="flex-1 min-w-0">
                                 <div className="truncate">
                                     {session.title || `Session ${session.session_id.slice(0, 8)}`}
@@ -118,76 +118,76 @@ const Sidebar = ({
                                     {session.message_count} messages
                                 </div>
                             </div>
-                            
-                            {/* Three dots menu */}
-                            {(hoveredSessionId === session.session_id || showSessionMenu === session.session_id) && (
-                                <div className="relative session-dropdown">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setShowSessionMenu(showSessionMenu === session.session_id ? null : session.session_id);
-                                        }}
-                                        onMouseEnter={() => setHoveredSessionId(session.session_id)}
-                                        className={`p-1 hover:bg-gray-600 rounded transition-opacity ${
-                                            showSessionMenu === session.session_id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                                        }`}
-                                    >
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                                        </svg>
-                                    </button>
-                                    
-                                    {/* Dropdown Menu */}
-                                    {showSessionMenu === session.session_id && (
-                                        <div className="absolute right-0 top-6 w-32 bg-gray-700 rounded-lg shadow-lg border border-gray-600 z-50 session-dropdown">
-                                            <div className="py-1">
+                        </button>
+                        
+                        {/* Three dots menu - now outside the main button (fixed nested button issue) */}
+                        {(hoveredSessionId === session.session_id || showSessionMenu === session.session_id) && (
+                            <div className="relative session-dropdown">
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowSessionMenu(showSessionMenu === session.session_id ? null : session.session_id);
+                                    }}
+                                    onMouseEnter={() => setHoveredSessionId(session.session_id)}
+                                    className={`p-1 hover:bg-gray-600 rounded transition-opacity mr-2 ${
+                                        showSessionMenu === session.session_id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                                    }`}
+                                >
+                                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                                    </svg>
+                                </button>
+                                
+                                {/* Dropdown Menu */}
+                                {showSessionMenu === session.session_id && (
+                                    <div className="absolute right-0 top-6 w-32 bg-gray-700 rounded-lg shadow-lg border border-gray-600 z-50 session-dropdown">
+                                        <div className="py-1">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRenameSession(session.session_id, session.title || `Session ${session.session_id.slice(0, 8)}`);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 flex items-center space-x-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                </svg>
+                                                <span>Rename</span>
+                                            </button>
+                                            {ARCHIVE_FEATURE_ENABLED && (
                                                 <button
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        handleRenameSession(session.session_id, session.title || `Session ${session.session_id.slice(0, 8)}`);
+                                                        onArchiveSession(session.session_id);
+                                                        setShowSessionMenu(null);
                                                     }}
                                                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 flex items-center space-x-2"
                                                 >
                                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
                                                     </svg>
-                                                    <span>Rename</span>
+                                                    <span>Archive</span>
                                                 </button>
-                                                {ARCHIVE_FEATURE_ENABLED && (
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            onArchiveSession(session.session_id);
-                                                            setShowSessionMenu(null);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 flex items-center space-x-2"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l4 4 4-4m6 5l-3 3-3-3" />
-                                                        </svg>
-                                                        <span>Archive</span>
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onDeleteSession(session.session_id);
-                                                        setShowSessionMenu(null);
-                                                    }}
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 text-red-400 flex items-center space-x-2"
-                                                >
-                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                    <span>Delete</span>
-                                                </button>
-                                            </div>
+                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDeleteSession(session.session_id);
+                                                    setShowSessionMenu(null);
+                                                }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-600 text-red-400 flex items-center space-x-2"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                </svg>
+                                                <span>Delete</span>
+                                            </button>
                                         </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

@@ -2,18 +2,100 @@
  * apiService.js - Backend Communication Layer
  * Purpose: Centralized HTTP client for all API calls with unified error handling.
  * Single source of truth for backend communication and request/response processing.
+ * Context7 Compliant: Follows modern fetch API patterns and error handling best practices.
  */
+
+// Context7 Best Practice: Custom Error Classes for Better Error Handling
+class ApiError extends Error {
+    constructor(response, message) {
+        super(message || `HTTP ${response.status}: ${response.statusText}`);
+        this.name = 'ApiError';
+        this.response = response;
+        this.status = response.status;
+        this.statusText = response.statusText;
+    }
+}
+
+class NetworkError extends Error {
+    constructor(originalError) {
+        super(`Network error: ${originalError.message}`);
+        this.name = 'NetworkError';
+        this.originalError = originalError;
+    }
+}
+
 class ApiService {
-    constructor(baseUrl = 'http://localhost:8000') {
+    constructor(baseUrl = 'https://localhost:8001') {
         this.baseUrl = baseUrl;
+        // Context7 Best Practice: Cache auth headers to avoid repeated async calls
+        this._authHeadersCache = null;
+        this._authHeadersCacheTime = 0;
+        this._authHeadersCacheTTL = 30000; // 30 seconds
     }
 
-    // Helper method for making HTTP requests
+    // Context7 Best Practice: Centralized auth header management with caching
+    async _getAuthHeaders() {
+        const now = Date.now();
+        
+        // Return cached headers if still valid
+        if (this._authHeadersCache && (now - this._authHeadersCacheTime) < this._authHeadersCacheTTL) {
+            return this._authHeadersCache;
+        }
+
+        let authHeaders = {};
+        
+        try {
+            // Use the new auth state manager for better caching and reliability
+            if (window.authStateManager) {
+                const authState = await window.authStateManager.getAuthState();
+                if (authState.isAuthenticated && authState.accessToken) {
+                    // Context7 Best Practice: Validate token format
+                    const token = authState.accessToken;
+                    const isJWT = token.split('.').length === 3;
+                    
+                    if (!isJWT) {
+                        console.warn('⚠️ Received opaque token instead of JWT. Please clear Auth0 cache and re-authenticate.');
+                    }
+                    
+                    authHeaders = {
+                        'Authorization': `Bearer ${authState.accessToken}`
+                    };
+                    console.log('✅ Auth headers created successfully');
+                }
+            } else if (window.getAuth0State) {
+                // Fallback to direct Auth0 state if manager not available
+                const authState = await window.getAuth0State();
+                if (authState.isAuthenticated && authState.accessToken) {
+                    authHeaders = {
+                        'Authorization': `Bearer ${authState.accessToken}`
+                    };
+                    console.log('✅ Auth headers created successfully (fallback)');
+                }
+            }
+        } catch (authError) {
+            // Context7 Best Practice: Only log auth-specific errors, don't throw
+            console.warn('⚠️ Could not get auth headers:', authError.message);
+        }
+
+        // Cache the headers
+        this._authHeadersCache = authHeaders;
+        this._authHeadersCacheTime = now;
+        
+        return authHeaders;
+    }
+
+    // Context7 Best Practice: Clear auth cache when needed
+    _clearAuthCache() {
+        this._authHeadersCache = null;
+        this._authHeadersCacheTime = 0;
+    }
+
+    // Context7 Best Practice: Centralized request method with proper error handling
     async makeRequest(endpoint, options = {}) {
         const url = `${this.baseUrl}${endpoint}`;
         
-        // Get auth headers if available
-        const authHeaders = window.auth0Service ? window.auth0Service.getAuthHeader() : {};
+        // Get auth headers with caching
+        const authHeaders = await this._getAuthHeaders();
         
         const config = {
             headers: {
@@ -24,14 +106,59 @@ class ApiService {
             ...options
         };
 
-        const response = await fetch(url, config);
+        let response;
         
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ detail: 'Request failed' }));
-            throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+        try {
+            // Context7 Best Practice: Use fetch with proper error handling
+            response = await fetch(url, config);
+        } catch (fetchError) {
+            // Context7 Best Practice: Wrap network errors in custom error class
+            throw new NetworkError(fetchError);
         }
         
-        return response.json();
+        // Context7 Best Practice: Check response.ok for HTTP status validation
+        if (!response.ok) {
+            // Clear auth cache on 401 errors
+            if (response.status === 401) {
+                this._clearAuthCache();
+            }
+            
+            let errorMessage;
+            
+            try {
+                // Context7 Best Practice: Try to parse error response as JSON
+                const errorData = await response.json();
+                errorMessage = errorData.detail || errorData.message || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+            } catch (parseError) {
+                // If JSON parsing fails, use status information
+                errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            }
+            
+            console.error(`❌ HTTP ${response.status} error:`, errorMessage);
+            throw new ApiError(response, errorMessage);
+        }
+        
+        // Context7 Best Practice: Parse JSON response with error handling
+        try {
+            return await response.json();
+        } catch (parseError) {
+            console.warn('⚠️ Response is not valid JSON, returning text');
+            return await response.text();
+        }
+    }
+
+    // Context7 Best Practice: Helper method for cache-busting requests
+    _addCacheBuster(endpoint) {
+        const separator = endpoint.includes('?') ? '&' : '?';
+        return `${endpoint}${separator}_t=${Date.now()}`;
+    }
+
+    // Context7 Best Practice: Helper method for no-cache headers
+    _getNoCacheHeaders() {
+        return {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        };
     }
 
     // System Status API
@@ -44,14 +171,11 @@ class ApiService {
         }
     }
 
-    // Sessions API
+    // Sessions API - Context7 Best Practice: Consistent cache-busting pattern
     async fetchSessions() {
         try {
-            return await this.makeRequest(`/sessions?_t=${Date.now()}`, {
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
+            return await this.makeRequest(this._addCacheBuster('/sessions'), {
+                headers: this._getNoCacheHeaders()
             });
         } catch (error) {
             console.error('Error fetching sessions:', error);
@@ -61,11 +185,8 @@ class ApiService {
 
     async loadSessionMessages(sessionId) {
         try {
-            return await this.makeRequest(`/sessions/${sessionId}/history?_t=${Date.now()}`, {
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
+            return await this.makeRequest(this._addCacheBuster(`/sessions/${sessionId}/history`), {
+                headers: this._getNoCacheHeaders()
             });
         } catch (error) {
             console.error(`Error loading session messages for ${sessionId}:`, error);
@@ -109,11 +230,8 @@ class ApiService {
 
     async fetchArchivedSessions() {
         try {
-            return await this.makeRequest(`/sessions/archived?_t=${Date.now()}`, {
-                headers: {
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                }
+            return await this.makeRequest(this._addCacheBuster('/sessions/archived'), {
+                headers: this._getNoCacheHeaders()
             });
         } catch (error) {
             console.error('Error fetching archived sessions:', error);
@@ -218,6 +336,49 @@ class ApiService {
             throw error;
         }
     }
+
+    // Context7 Best Practice: Utility method for handling specific error types
+    isNetworkError(error) {
+        return error instanceof NetworkError;
+    }
+
+    isApiError(error) {
+        return error instanceof ApiError;
+    }
+
+    isAuthError(error) {
+        return error instanceof ApiError && error.status === 401;
+    }
+
+    // Context7 Best Practice: Method to retry requests with exponential backoff
+    async retryRequest(requestFn, maxRetries = 3, baseDelay = 1000) {
+        let lastError;
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await requestFn();
+            } catch (error) {
+                lastError = error;
+                
+                // Don't retry on auth errors or client errors (4xx)
+                if (this.isAuthError(error) || (this.isApiError(error) && error.status >= 400 && error.status < 500)) {
+                    throw error;
+                }
+                
+                // Don't retry on the last attempt
+                if (attempt === maxRetries) {
+                    break;
+                }
+                
+                // Exponential backoff with jitter
+                const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+                console.log(`⏳ Retrying request in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+        
+        throw lastError;
+    }
 }
 
 // Create a default instance for easy importing
@@ -225,4 +386,6 @@ const apiService = new ApiService();
 
 // Export both the class and the default instance
 window.ApiService = ApiService;
-window.apiService = apiService; 
+window.apiService = apiService;
+window.ApiError = ApiError;
+window.NetworkError = NetworkError; 

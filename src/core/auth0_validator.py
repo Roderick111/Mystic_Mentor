@@ -7,6 +7,7 @@ Supports FastAPI integration with proper error handling and user extraction.
 
 import json
 import os
+import base64
 from typing import Dict, Any, Optional
 from urllib.request import urlopen
 from urllib.error import URLError
@@ -18,7 +19,7 @@ from authlib.jose import jwt, JoseError
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 class Auth0User(BaseModel):
@@ -36,6 +37,43 @@ class Auth0User(BaseModel):
     memory_preferences: Optional[Dict[str, Any]] = {}
     active_domains: Optional[list] = []
     session_settings: Optional[Dict[str, Any]] = {}
+
+
+def _get_unverified_header(token: str) -> Dict[str, Any]:
+    """
+    Extract JWT header without verification.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Dict containing the JWT header
+        
+    Raises:
+        ValueError: If token format is invalid
+    """
+    try:
+        # JWT format: header.payload.signature
+        parts = token.split('.')
+        if len(parts) != 3:
+            raise ValueError("Invalid JWT format")
+        
+        # Decode the header (first part)
+        header_b64 = parts[0]
+        
+        # Add padding if needed for base64 decoding
+        padding = 4 - len(header_b64) % 4
+        if padding != 4:
+            header_b64 += '=' * padding
+        
+        # Decode base64 and parse JSON
+        header_bytes = base64.urlsafe_b64decode(header_b64)
+        header = json.loads(header_bytes.decode('utf-8'))
+        
+        return header
+        
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ValueError(f"Failed to decode JWT header: {e}")
 
 
 class Auth0JWTBearerTokenValidator(JWTBearerTokenValidator):
@@ -170,9 +208,15 @@ class Auth0TokenValidator:
             HTTPException: On validation failure
         """
         try:
+            # Debug: Log token format (first 50 chars for security)
+            logger.debug(f"🔍 Validating token format: {token[:50]}...")
+            logger.debug(f"🔍 Token length: {len(token)}")
+            
             # Get unverified header to extract key ID
-            unverified_header = jwt.get_unverified_header(token)
+            unverified_header = _get_unverified_header(token)
             kid = unverified_header.get("kid")
+            
+            logger.debug(f"🔍 Extracted header: {unverified_header}")
             
             if not kid:
                 raise HTTPException(
@@ -190,10 +234,25 @@ class Auth0TokenValidator:
                 signing_key,
                 claims_options={
                     "exp": {"essential": True},
-                    "aud": {"essential": True, "value": self.audience},
+                    "aud": {"essential": True},  # Don't specify exact value, check manually
                     "iss": {"essential": True, "value": self.issuer},
                 }
             )
+            
+            # Manually validate audience (handle both single string and array)
+            token_audience = payload.get("aud")
+            if isinstance(token_audience, list):
+                if self.audience not in token_audience:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Token audience {token_audience} does not include required audience {self.audience}"
+                    )
+            else:
+                if token_audience != self.audience:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Token audience {token_audience} does not match required audience {self.audience}"
+                    )
             
             # Extract user information
             user_data = {
@@ -218,6 +277,13 @@ class Auth0TokenValidator:
             logger.debug(f"✅ Token validated for user: {user_data['sub']}")
             return Auth0User(**user_data)
             
+        except ValueError as e:
+            # Handle JWT format errors specifically
+            logger.error(f"❌ JWT format error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token format"
+            )
         except JoseError as e:
             logger.warning(f"🔒 JWT validation failed: {e}")
             raise HTTPException(
@@ -247,6 +313,11 @@ def get_auth0_config() -> tuple[str, str]:
     """
     domain = os.getenv("AUTH0_DOMAIN")
     audience = os.getenv("AUTH0_AUDIENCE")
+    
+    # Temporary fix: Override incorrect Management API audience with custom API audience
+    if audience == "https://dev-d2dttzao1vs6jrmf.us.auth0.com/api/v2/":
+        audience = "https://mystical-mentor-api"
+        logger.info("🔧 Overriding Auth0 Management API audience with custom API audience")
     
     if not domain:
         raise ValueError(

@@ -42,8 +42,8 @@ src/core/auth0_middleware.py    # FastAPI middleware and dependencies
 ### **Configuration & Documentation**
 ```
 config/env.example              # Environment variable template
-docs/AUTH0_SETUP.md            # Complete setup instructions
-PRODUCTION_READY.md            # This summary document
+docs/setup/AUTH0_SETUP.md            # Complete setup instructions
+docs/deployment/PRODUCTION_READY.md            # This summary document
 ```
 
 ### **Testing & Deployment**
@@ -123,7 +123,7 @@ python src/web_api.py
 - Ready for local development and testing
 
 ### **Option 2: Full Auth0 Setup**
-Follow `docs/AUTH0_SETUP.md` for complete Auth0 integration:
+Follow `docs/setup/AUTH0_SETUP.md` for complete Auth0 integration:
 1. Create Auth0 account and applications
 2. Configure environment variables
 3. Set up custom claims
@@ -183,7 +183,7 @@ python scripts/deploy_production.py
 ## 📞 **Support & Next Steps**
 
 ### **Need Help?**
-- 📖 **Setup Guide**: `docs/AUTH0_SETUP.md`
+- 📖 **Setup Guide**: `docs/setup/AUTH0_SETUP.md`
 - 🧪 **Test Integration**: `python test_auth0.py`
 - 🚀 **Deploy**: `python scripts/deploy_production.py`
 - ❓ **Troubleshooting**: Check health endpoint `/health`

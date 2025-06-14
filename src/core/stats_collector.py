@@ -15,7 +15,7 @@ from typing import Dict, Any, Optional
 from collections import defaultdict, deque
 from datetime import datetime
 
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 class StatsCollector:

@@ -11,7 +11,7 @@ from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from .auth0_validator import Auth0User, auth0_validator
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 # FastAPI security scheme
@@ -99,6 +99,11 @@ class Auth0Middleware:
             )
         
         try:
+            # Debug: Log credentials info
+            logger.debug(f"🔍 Received credentials scheme: {credentials.scheme}")
+            logger.debug(f"🔍 Received credentials token (first 50 chars): {credentials.credentials[:50]}...")
+            logger.debug(f"🔍 Token length: {len(credentials.credentials)}")
+            
             user = await auth0_validator.validate_token(credentials.credentials)
             logger.debug(f"✅ User authenticated: {user.sub}")
             return user

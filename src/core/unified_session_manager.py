@@ -9,7 +9,7 @@ import uuid
 import os
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from utils.logger import logger
+from src.utils.logger import logger
 
 
 class UnifiedSessionManager:
