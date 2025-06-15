@@ -59,23 +59,28 @@ async function initAuth0() {
         throw new Error('Auth0.createAuth0Client method not available');
       }
 
-      // Step 3: Configure and create Auth0 client
-      const redirectUri = `${window.location.origin}/web/`;
+      // Step 3: Configure and create Auth0 client using configuration system
+      const auth0Config = window.AppConfig ? window.AppConfig.getAuth0Config() : null;
+      
+      if (!auth0Config || !auth0Config.domain || !auth0Config.clientId) {
+        throw new Error('Auth0 configuration missing. Please ensure secrets.js is loaded with proper credentials.');
+      }
+      const redirectUri = window.AppConfig ? window.AppConfig.getRedirectUri() : `${window.location.origin}/`;
 
       // Create Auth0 client with CORS-friendly configuration
       window.auth0Client = await auth0.createAuth0Client({
-        domain: 'dev-d2dttzao1vs6jrmf.us.auth0.com',
-        clientId: 'TTfc367IPClXNSrHO00zbzuWgv732bl3',
-        audience: 'https://mystical-mentor-api',
+        domain: auth0Config.domain,
+        clientId: auth0Config.clientId,
+        // Remove duplicate audience - should only be in authorizationParams
         cacheLocation: 'localstorage',
         useRefreshTokens: true,
         // Skip CORS preflight checks where possible
         skipRedirectCallback: false,
         authorizationParams: {
           redirect_uri: redirectUri,
-          scope: 'openid profile email',
+          scope: auth0Config.scope || 'openid profile email',
           // Force JWT tokens by explicitly requesting the audience
-          audience: 'https://mystical-mentor-api'
+          audience: auth0Config.audience
         }
       });
 
@@ -107,7 +112,7 @@ async function initAuth0() {
           console.log('✅ Auth0 callback processed:', result);
           
           // Clean up URL
-          window.history.replaceState({}, document.title, '/web/');
+          window.history.replaceState({}, document.title, '/');
           
           // Refresh page to update auth state
           setTimeout(() => {
@@ -148,7 +153,7 @@ async function initAuth0() {
           }
           
           // Clean up URL regardless
-          window.history.replaceState({}, document.title, '/web/');
+          window.history.replaceState({}, document.title, '/');
         }
       }
 
@@ -208,7 +213,11 @@ window.getAuth0State = async function() {
     if (isAuthenticated) {
       try {
         user = await window.auth0Client.getUser();
-        accessToken = await window.auth0Client.getTokenSilently();
+        // Force JWT token by explicitly requesting the audience
+        const auth0Config = window.AppConfig ? window.AppConfig.getAuth0Config() : null;
+        accessToken = await window.auth0Client.getTokenSilently({
+          audience: auth0Config?.audience || 'https://mystical-mentor-api'
+        });
       } catch (tokenError) {
         console.warn('⚠️ Failed to get user info or token:', tokenError);
         // Don't fail the whole state check for token issues - might be CORS related
@@ -272,7 +281,7 @@ window.auth0Logout = async function() {
       throw new Error('Auth0 client not initialized. Please refresh the page and try again.');
     }
     
-    const returnTo = `${window.location.origin}/web/`;
+    const returnTo = `${window.location.origin}/`;
     console.log('🔗 Logging out with return URL:', returnTo);
     
     // This should work even with CORS issues since it's a redirect
@@ -295,6 +304,74 @@ window.auth0Logout = async function() {
   }
 };
 
+// Token validation helper
+window.validateAuth0Token = async function() {
+  try {
+    console.log('🔍 Validating Auth0 token...');
+    
+    if (!window.auth0Client) {
+      console.error('❌ Auth0 client not initialized');
+      return { error: 'Auth0 client not initialized' };
+    }
+    
+    const isAuthenticated = await window.auth0Client.isAuthenticated();
+    if (!isAuthenticated) {
+      console.log('ℹ️ User not authenticated');
+      return { authenticated: false };
+    }
+    
+    // Get token with audience
+    const auth0Config = window.AppConfig ? window.AppConfig.getAuth0Config() : null;
+    const token = await window.auth0Client.getTokenSilently({
+      audience: auth0Config?.audience || 'https://mystical-mentor-api'
+    });
+    
+    // Analyze token format
+    const tokenParts = token.split('.');
+    const isJWT = tokenParts.length === 3;
+    
+    console.log('📊 Token Analysis:');
+    console.log('- Token length:', token.length);
+    console.log('- Token parts:', tokenParts.length);
+    console.log('- Is JWT format:', isJWT);
+    console.log('- Token preview:', token.substring(0, 50) + '...');
+    
+    if (isJWT) {
+      try {
+        // Decode JWT payload (without verification)
+        const payload = JSON.parse(atob(tokenParts[1]));
+        console.log('- JWT Audience:', payload.aud);
+        console.log('- JWT Issuer:', payload.iss);
+        console.log('- JWT Subject:', payload.sub);
+        console.log('- JWT Expires:', new Date(payload.exp * 1000));
+        
+        return {
+          authenticated: true,
+          isJWT: true,
+          token: token,
+          payload: payload,
+          audience: payload.aud,
+          issuer: payload.iss
+        };
+      } catch (decodeError) {
+        console.warn('⚠️ Failed to decode JWT payload:', decodeError);
+      }
+    }
+    
+    return {
+      authenticated: true,
+      isJWT: isJWT,
+      token: token,
+      tokenLength: token.length,
+      tokenParts: tokenParts.length
+    };
+    
+  } catch (error) {
+    console.error('❌ Token validation error:', error);
+    return { error: error.message };
+  }
+};
+
 // Enhanced debug helper
 window.debugAuth0 = function() {
   console.log('🔍 Auth0 Debug Info:');
@@ -306,12 +383,18 @@ window.debugAuth0 = function() {
   console.log('- initError:', window.auth0InitError || 'None');
   console.log('- Current URL:', window.location.href);
   console.log('- Has callback params:', window.location.search.includes('code=') && window.location.search.includes('state='));
-  console.log('- Expected redirect URI:', `${window.location.origin}/web/`);
+  console.log('- Expected redirect URI:', `${window.location.origin}/`);
   
-  // Test direct login URL
-  const directLoginUrl = 'https://dev-d2dttzao1vs6jrmf.us.auth0.com/authorize?' + 
-    'client_id=TTfc367IPClXNSrHO00zbzuWgv732bl3&' +
-    'redirect_uri=' + encodeURIComponent(`${window.location.origin}/web/`) + '&' +
+  // Test direct login URL using configuration
+  const auth0Config = window.AppConfig ? window.AppConfig.getAuth0Config() : null;
+  if (!auth0Config) {
+    console.error('❌ Auth0 configuration not available for debug URL');
+    return { error: 'Auth0 configuration missing' };
+  }
+  const redirectUri = window.AppConfig ? window.AppConfig.getRedirectUri() : `${window.location.origin}/`;
+  const directLoginUrl = `https://${auth0Config.domain}/authorize?` + 
+    `client_id=${auth0Config.clientId}&` +
+    'redirect_uri=' + encodeURIComponent(redirectUri) + '&' +
     'scope=openid+profile+email&' +
     'response_type=code&' +
     'state=debug-test-' + Date.now();
@@ -328,7 +411,7 @@ window.debugAuth0 = function() {
     initError: window.auth0InitError,
     currentUrl: window.location.href,
     hasCallbackParams: window.location.search.includes('code=') && window.location.search.includes('state='),
-    expectedRedirectUri: `${window.location.origin}/web/`,
+    expectedRedirectUri: `${window.location.origin}/`,
     directLoginUrl: directLoginUrl
   };
 };
@@ -383,9 +466,16 @@ window.clearAuth0CacheAndReauth = async function() {
     console.log('🔄 Reset Auth0 global state');
     
     // Step 4: Force logout from Auth0 domain (this clears server-side session)
-    const logoutUrl = 'https://dev-d2dttzao1vs6jrmf.us.auth0.com/v2/logout?' +
-      'client_id=TTfc367IPClXNSrHO00zbzuWgv732bl3&' +
-      'returnTo=' + encodeURIComponent(`${window.location.origin}/web/`);
+    const auth0Config = window.AppConfig ? window.AppConfig.getAuth0Config() : null;
+    if (!auth0Config) {
+      console.error('❌ Auth0 configuration not available for logout');
+      alert('Configuration error. Please refresh the page and try again.');
+      return;
+    }
+    const redirectUri = window.AppConfig ? window.AppConfig.getRedirectUri() : `${window.location.origin}/`;
+    const logoutUrl = `https://${auth0Config.domain}/v2/logout?` +
+      `client_id=${auth0Config.clientId}&` +
+      'returnTo=' + encodeURIComponent(redirectUri);
     
     console.log('🚪 Redirecting to Auth0 logout to clear server session...');
     console.log('Logout URL:', logoutUrl);
