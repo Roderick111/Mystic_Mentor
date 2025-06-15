@@ -25,8 +25,9 @@ class NetworkError extends Error {
 }
 
 class ApiService {
-    constructor(baseUrl = 'https://localhost:8001') {
-        this.baseUrl = baseUrl;
+    constructor(baseUrl = null) {
+        // Use configuration system instead of hardcoded URL
+        this.baseUrl = baseUrl || (window.AppConfig ? window.AppConfig.getApiBaseUrl() : 'https://localhost:8001');
         // Context7 Best Practice: Cache auth headers to avoid repeated async calls
         this._authHeadersCache = null;
         this._authHeadersCacheTime = 0;
@@ -97,14 +98,28 @@ class ApiService {
         // Get auth headers with caching
         const authHeaders = await this._getAuthHeaders();
         
+        // DEBUG: Log header merging for Stripe requests
+        if (endpoint.includes('stripe')) {
+            console.log('🔍 DEBUG makeRequest for Stripe:');
+            console.log('  endpoint:', endpoint);
+            console.log('  authHeaders:', authHeaders);
+            console.log('  options.headers:', options.headers);
+        }
+        
         const config = {
+            ...options,
             headers: {
                 'Content-Type': 'application/json',
                 ...authHeaders,
                 ...options.headers
-            },
-            ...options
+            }
         };
+        
+        // DEBUG: Log final headers for Stripe requests
+        if (endpoint.includes('stripe')) {
+            console.log('  final config.headers:', config.headers);
+            console.log('  has Authorization:', !!config.headers.Authorization);
+        }
 
         let response;
         

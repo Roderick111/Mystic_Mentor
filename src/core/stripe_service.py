@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 import hashlib
 import json
+import logging
 
 from src.utils.logger import logger
 
@@ -66,42 +67,27 @@ class StripeService:
     """
     
     def __init__(self):
-        """Initialize Stripe with Context7 best practices."""
-        self.secret_key = os.getenv("STRIPE_SECRET_KEY")
-        self.publishable_key = os.getenv("STRIPE_PUBLISHABLE_KEY")
-        self.webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+        """Initialize Stripe service with v8+ StripeClient"""
+        api_key = os.getenv("STRIPE_SECRET_KEY")
+        if not api_key:
+            raise ValueError("STRIPE_SECRET_KEY environment variable is required")
+        
+        # v8+ StripeClient initialization
+        self.client = stripe.StripeClient(api_key)
+        
+        # Price IDs from environment
         self.monthly_price_id = os.getenv("STRIPE_MONTHLY_PRICE_ID")
         self.lifetime_price_id = os.getenv("STRIPE_LIFETIME_PRICE_ID")
         
+        if not self.monthly_price_id or not self.lifetime_price_id:
+            logger.warning("Stripe price IDs not configured")
+        
         # Debug: Check if keys are loaded
-        logger.debug(f"Stripe key status: secret_key={'present' if self.secret_key else 'missing'}, "
-                    f"publishable_key={'present' if self.publishable_key else 'missing'}, "
-                    f"monthly_price={'present' if self.monthly_price_id else 'missing'}, "
+        logger.debug(f"Stripe key status: monthly_price={'present' if self.monthly_price_id else 'missing'}, "
                     f"lifetime_price={'present' if self.lifetime_price_id else 'missing'}")
         
-        if not self.secret_key:
-            logger.warning("Stripe not configured - STRIPE_SECRET_KEY missing")
-            self.enabled = False
-            self.client = None
-            return
-            
-        # Context7 Best Practice: Use modern StripeClient with configuration
-        self.client = stripe.StripeClient(
-            api_key=self.secret_key,
-            max_network_retries=3,  # Auto-retry transient errors
-            # Context7: Enable telemetry for better support
-            # stripe.enable_telemetry = True (set globally)
-        )
-        
-        # Context7 Best Practice: Set app info for identification
-        stripe.set_app_info(
-            "EsotericVectors",
-            version="1.0.0",
-            url="https://mystical-mentor.beautiful-apps.com"
-        )
-        
         self.enabled = True
-        logger.system_ready("Stripe service initialized with Context7 best practices")
+        logger.system_ready("Stripe service initialized with v8+ StripeClient")
     
     def _generate_idempotency_key(self, user_id: str, plan_type: str, operation: str = "checkout") -> str:
         """
@@ -112,104 +98,55 @@ class StripeService:
         data = f"{operation}:{user_id}:{plan_type}:{timestamp}"
         return hashlib.sha256(data.encode()).hexdigest()[:32]
     
-    def _get_or_create_customer(self, user_email: str, auth0_user_id: str) -> str:
-        """
-        Get existing Stripe customer or create new one.
-        Context7 Best Practice: Use modern client methods with efficient search.
-        Note: Stripe Python client is synchronous, so we don't use async/await here.
-        """
+    def _get_or_create_customer(self, user_email: str, user_id: str) -> str:
+        """Get existing customer or create new one using v8+ syntax"""
         try:
-            # Context7 Pattern: Search by metadata using list method (search is not available with query param)
+            logger.debug(f"🔍 Looking for customer with email: {user_email}")
+            
+            # v8+ syntax: Use params={} for all parameters
             customers = self.client.customers.list(
-                email=user_email,
-                limit=10
-            )
-            
-            # Check if customer exists with matching auth0_user_id
-            for customer in customers.data:
-                if customer.metadata.get('auth0_user_id') == auth0_user_id:
-                    logger.debug(f"Found existing customer: {customer.id}")
-                    return customer.id
-            
-            # Context7 Pattern: Fallback to email-only search if no metadata match
-            if customers.data:
-                # Update existing customer with auth0_user_id metadata
-                existing_customer = customers.data[0]
-                updated_customer = self.client.customers.modify(
-                    existing_customer.id,
-                    metadata={'auth0_user_id': auth0_user_id}
-                )
-                logger.debug(f"Updated existing customer with metadata: {updated_customer.id}")
-                return updated_customer.id
-            
-            # Context7 Pattern: Create new customer with proper metadata
-            new_customer = self.client.customers.create(
-                email=user_email,
-                metadata={
-                    'auth0_user_id': auth0_user_id,
-                    'created_by': 'esoteric_vectors',
-                    'created_at': datetime.now(timezone.utc).isoformat()
+                params={
+                    "email": user_email,
+                    "limit": 1
                 }
             )
             
-            logger.debug(f"Created new customer: {new_customer.id}")
-            return new_customer.id
+            if customers.data:
+                customer_id = customers.data[0].id
+                logger.debug(f"✅ Found existing customer: {customer_id}")
+                return customer_id
             
-        except stripe.StripeError as e:
-            logger.error(f"❌ Stripe error managing customer: {e}")
-            # Context7: Handle specific Stripe error types
-            if e.code == 'rate_limit':
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Service temporarily busy. Please try again."
-                )
-            elif e.code == 'api_key_expired':
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Payment service configuration error"
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Customer management error: {str(e)}"
-                )
+            # Create new customer with v8+ syntax
+            logger.debug(f"🆕 Creating new customer for {user_email}")
+            customer = self.client.customers.create(
+                params={
+                    "email": user_email,
+                    "metadata": {
+                        "user_id": user_id,
+                        "created_via": "esoteric_vectors_api"
+                    }
+                }
+            )
+            
+            logger.debug(f"✅ Created new customer: {customer.id}")
+            return customer.id
+            
         except Exception as e:
-            logger.error(f"❌ Unexpected error managing customer: {e}")
+            logger.error(f"❌ Customer management failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Customer management failed"
+                detail=f"Customer management failed: {str(e)}"
             )
     
     def create_checkout_session(
-        self, 
-        plan_type: str, 
+        self,
+        plan_type: str,
         user_email: str,
-        auth0_user_id: str,
+        user_id: str,
         success_url: str,
         cancel_url: str
     ) -> Dict[str, Any]:
-        """
-        Create a Stripe checkout session following Context7 best practices.
-        
-        Args:
-            plan_type: "monthly" or "lifetime"
-            user_email: User's email for pre-filling
-            auth0_user_id: Auth0 user ID for linking
-            success_url: URL to redirect after successful payment
-            cancel_url: URL to redirect if payment is canceled
-            
-        Returns:
-            dict: Contains checkout session ID and URL
-        """
-        if not self.enabled:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Payment processing is temporarily unavailable"
-            )
-        
-        # Context7 Security: Validate HTTPS URLs in production
-        self._validate_https_urls(success_url, cancel_url)
-        
+        """Create checkout session using v8+ syntax"""
         try:
             # Validate plan type and get price ID
             if plan_type == "monthly":
@@ -230,84 +167,60 @@ class StripeService:
                     detail=f"Price configuration missing for {plan_type} plan"
                 )
             
-            # Context7 Best Practice: Always use customer ID for better tracking
-            customer_id = self._get_or_create_customer(user_email, auth0_user_id)
+            logger.debug(f"🎯 Creating checkout session for {plan_type} plan")
+            logger.debug(f"📧 User: {user_email}")
+            logger.debug(f"💰 Price ID: {price_id}")
             
-            # Context7 Best Practice: Comprehensive session parameters
-            session_params = {
-                'customer': customer_id,
-                'payment_method_types': ['card'],
-                'line_items': [{
-                    'price': price_id,
-                    'quantity': 1,
-                }],
-                'mode': mode,
-                'success_url': success_url,
-                'cancel_url': cancel_url,
-                'metadata': {
-                    'auth0_user_id': auth0_user_id,
-                    'plan_type': plan_type,
-                    'created_at': datetime.now(timezone.utc).isoformat(),
-                },
-                # Context7: Enable automatic tax calculation
-                'automatic_tax': {'enabled': True},
-                # Context7: Collect billing address for tax compliance
-                'billing_address_collection': 'required',
-            }
+            # Get or create customer
+            customer_id = self._get_or_create_customer(user_email, user_id)
             
-            # Context7 Best Practice: Add mode-specific metadata
-            if mode == "subscription":
-                session_params['subscription_data'] = {
-                    'metadata': {
-                        'auth0_user_id': auth0_user_id,
-                        'plan_type': plan_type,
-                        'created_at': datetime.now(timezone.utc).isoformat(),
-                    }
-                }
+            # Generate idempotency key
+            idempotency_key = f"checkout_{user_id}_{plan_type}_{int(datetime.now().timestamp())}"
             
-            # Context7 Best Practice: Use idempotency for safety
-            idempotency_key = self._generate_idempotency_key(auth0_user_id, plan_type, 'checkout')
-            
+            # v8+ syntax: Create checkout session with params={}
             session = self.client.checkout.sessions.create(
-                **session_params,
-                idempotency_key=idempotency_key
+                params={
+                    "success_url": success_url,
+                    "cancel_url": cancel_url,
+                    "payment_method_types": ["card"],
+                    "line_items": [
+                        {
+                            "price": price_id,
+                            "quantity": 1,
+                        }
+                    ],
+                    "mode": mode,
+                    "customer": customer_id,
+                    "customer_update": {
+                        "address": "auto"
+                    },
+                    "metadata": {
+                        "user_id": user_id,
+                        "plan_type": plan_type,
+                        "created_via": "esoteric_vectors_api"
+                    }
+                },
+                options={
+                    "idempotency_key": idempotency_key
+                }
             )
             
-            logger.debug(f"Checkout session created: {session.id} for user {auth0_user_id}")
+            logger.debug(f"✅ Checkout session created: {session.id}")
             
             return {
                 "session_id": session.id,
                 "url": session.url,
-                "plan_type": plan_type,
                 "customer_id": customer_id
             }
             
-        except stripe.StripeError as e:
-            logger.error(f"Stripe API error: {e}")
-            # Context7: Handle specific Stripe error types
-            if e.code == 'parameter_invalid_empty':
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid payment configuration. Please contact support."
-                )
-            elif e.code == 'rate_limit':
-                raise HTTPException(
-                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Too many requests. Please try again in a moment."
-                )
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Payment processing error. Please try again."
-                )
         except HTTPException:
-            # Re-raise HTTP exceptions
             raise
         except Exception as e:
-            logger.error(f"Unexpected error creating checkout session: {e}")
+            logger.error(f"❌ Unexpected error creating checkout session: {e}")
+            logger.error(f"❌ Error type: {type(e).__name__}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Payment processing failed"
+                detail=f"Payment processing failed: {str(e)}"
             )
     
     def _validate_https_urls(self, success_url: str, cancel_url: str) -> None:
@@ -337,14 +250,14 @@ class StripeService:
         Returns:
             dict: Processing result
         """
-        if not self.enabled or not self.webhook_secret:
+        if not self.enabled:
             logger.warning("⚠️ Webhook received but Stripe not fully configured")
             return {"status": "ignored", "reason": "stripe_not_configured"}
         
         try:
             # Context7 Best Practice: Enhanced signature verification
             event = stripe.Webhook.construct_event(
-                payload, signature, self.webhook_secret
+                payload, signature, os.getenv("STRIPE_WEBHOOK_SECRET")
             )
             
             logger.debug(f"Stripe webhook received: {event['type']} (ID: {event.get('id', 'unknown')})")
@@ -606,101 +519,70 @@ class StripeService:
             logger.error(f"❌ Failed to remove role: {e}")
             return False
     
-    def get_customer_subscriptions(self, customer_email: str) -> List[SubscriptionData]:
-        """
-        Get all subscriptions for a customer by email.
-        Context7 Best Practice: Use modern client methods with efficient search.
-        Note: Stripe Python client is synchronous.
-        
-        Args:
-            customer_email: Customer's email address
-            
-        Returns:
-            List of subscription data
-        """
-        if not self.enabled:
-            return []
-        
+    def get_customer_subscriptions(self, user_email: str) -> List[Dict[str, Any]]:
+        """Get customer's active subscriptions using v8+ syntax"""
         try:
-            # Context7 Pattern: Use list method to find customer by email
+            # Get customer first
             customers = self.client.customers.list(
-                email=customer_email,
-                limit=1
+                params={
+                    "email": user_email,
+                    "limit": 1
+                }
             )
             
             if not customers.data:
-                logger.debug(f"No Stripe customer found for email: {customer_email}")
                 return []
             
-            customer = customers.data[0]
+            customer_id = customers.data[0].id
             
-            # Context7 Best Practice: Get subscriptions with expanded data
+            # Get subscriptions with v8+ syntax
             subscriptions = self.client.subscriptions.list(
-                customer=customer.id,
-                status='all',  # Include all statuses
-                expand=['data.default_payment_method', 'data.latest_invoice']
+                params={
+                    "customer": customer_id,
+                    "status": "active",
+                    "limit": 10
+                }
             )
             
-            result = []
-            for sub in subscriptions.data:
-                # Determine plan type from price ID
-                price_id = sub.items.data[0].price.id
-                plan_type = "monthly" if price_id == self.monthly_price_id else "lifetime"
-                
-                result.append(SubscriptionData(
-                    subscription_id=sub.id,
-                    customer_id=customer.id,
-                    status=sub.status,
-                    current_period_start=datetime.fromtimestamp(
-                        sub.current_period_start, timezone.utc
-                    ),
-                    current_period_end=datetime.fromtimestamp(
-                        sub.current_period_end, timezone.utc
-                    ),
-                    plan_type=plan_type,
-                    amount=sub.items.data[0].price.unit_amount,
-                    currency=sub.items.data[0].price.currency
-                ))
+            return [
+                {
+                    "id": sub.id,
+                    "status": sub.status,
+                    "current_period_end": sub.current_period_end,
+                    "plan_id": sub.items.data[0].price.id if sub.items.data else None,
+                }
+                for sub in subscriptions.data
+            ]
             
-            return result
-            
-        except stripe.StripeError as e:
-            logger.error(f"❌ Error fetching subscriptions: {e}")
-            return []
         except Exception as e:
-            logger.error(f"❌ Unexpected error fetching subscriptions: {e}")
+            logger.error(f"❌ Failed to get subscriptions: {e}")
             return []
     
-    def cancel_subscription(self, subscription_id: str) -> bool:
-        """
-        Cancel a subscription with Context7 best practices.
-        Note: Stripe Python client is synchronous.
-        
-        Args:
-            subscription_id: Stripe subscription ID
-            
-        Returns:
-            bool: Success status
-        """
-        if not self.enabled:
-            return False
-        
+    def cancel_subscription(self, subscription_id: str) -> Dict[str, Any]:
+        """Cancel a subscription using v8+ syntax"""
         try:
-            # Context7 Best Practice: Cancel at period end (don't immediately cut off access)
-            self.client.subscriptions.update(
+            # v8+ syntax: Cancel subscription
+            subscription = self.client.subscriptions.cancel(
                 subscription_id,
-                cancel_at_period_end=True
+                params={
+                    "prorate": True
+                }
             )
             
-            logger.debug(f"Subscription {subscription_id} marked for cancellation at period end")
-            return True
+            logger.info(f"✅ Subscription cancelled: {subscription_id}")
             
-        except stripe.StripeError as e:
-            logger.error(f"❌ Error canceling subscription {subscription_id}: {e}")
-            return False
+            return {
+                "success": True,
+                "subscription_id": subscription.id,
+                "status": subscription.status
+            }
+            
         except Exception as e:
-            logger.error(f"❌ Unexpected error canceling subscription: {e}")
-            return False
+            logger.error(f"❌ Failed to cancel subscription: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to cancel subscription: {str(e)}"
+            )
     
     def verify_session(self, session_id: str) -> Dict[str, Any]:
         """
@@ -745,10 +627,9 @@ class StripeService:
         """
         return {
             "enabled": self.enabled,
-            "publishable_key": self.publishable_key if self.enabled else None,
+            "publishable_key": os.getenv("STRIPE_PUBLISHABLE_KEY"),
             "has_monthly_plan": bool(self.monthly_price_id),
             "has_lifetime_plan": bool(self.lifetime_price_id),
-            "webhook_configured": bool(self.webhook_secret),
             "features": {
                 "customer_management": True,
                 "idempotency": True,

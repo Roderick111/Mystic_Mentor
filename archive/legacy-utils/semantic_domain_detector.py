@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """
-Semantic Domain Detector
+⚠️  ARCHIVED/LEGACY FILE - DO NOT USE ⚠️
 
-Uses OpenAI embeddings and cosine similarity to detect which knowledge domain 
-a user query relates to. Used for intelligent domain activation hints.
+This file is UNUSED and archived for historical reference only.
+It is NOT part of the current application and should NOT be imported or executed.
 
-Based on Context7 best practices for semantic similarity detection.
+Archived on: June 15, 2025
+Reason: Not integrated into current domain system (manual activation based)
+
+Original Purpose:
+Semantic Domain Detector - Uses OpenAI embeddings and cosine similarity to detect 
+which knowledge domain a user query relates to. Was designed for intelligent 
+domain activation hints.
+
+For current domain functionality, see the active files in src/ directory.
 """
 
 import os

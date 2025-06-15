@@ -1,3 +1,15 @@
+"""
+⚠️  ARCHIVED/LEGACY FILE - DO NOT USE ⚠️
+
+This file is UNUSED and archived for historical reference only.
+It is NOT part of the current application and should NOT be imported or executed.
+
+Archived on: June 15, 2025
+Reason: Redundant functionality, not integrated into current RAG pipeline
+
+For current functionality, see the active files in src/ directory.
+"""
+
 import json
 import time
 from pathlib import Path

@@ -4,19 +4,49 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🔮 Mystic Mentor</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔮</text></svg>" type="image/svg+xml">
-    <link rel="stylesheet" href="themes.css">
+    
+    <!-- Handle Auth0 callback redirect from /web/ to root -->
+    <script>
+      (function() {
+        // If we're on /web/ path with Auth0 callback parameters, redirect to root
+        if (window.location.pathname === '/web/' && (window.location.search.includes('code=') || window.location.search.includes('state='))) {
+          console.log('🔄 Redirecting Auth0 callback from /web/ to root...');
+          const newUrl = window.location.origin + '/' + window.location.search + window.location.hash;
+          window.location.replace(newUrl);
+          return;
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="/themes.css">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+    
+    <!-- Frontend Configuration System -->
+    <script src="/config/config.js"></script>
+    
+    <!-- Load secrets if available (optional, for sensitive config) -->
+    <script>
+      // Try to load secrets.js if it exists, but don't fail if it doesn't
+      (function() {
+        const script = document.createElement('script');
+        script.src = '/config/secrets.js';
+        script.onerror = () => console.warn('⚠️ secrets.js not found - Auth0 will not work without proper configuration');
+        document.head.appendChild(script);
+      })();
+    </script>
     
     <!-- Auth0 SPA SDK with fallback -->
     <script>
       // Load Auth0 SDK with fallback
       (function() {
         const primaryCDN = 'https://cdn.auth0.com/js/auth0-spa-js/2.1/auth0-spa-js.production.js';
-        const fallbackCDN = 'https://unpkg.com/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js';
+        const fallbackCDN = 'https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2.1.3/dist/auth0-spa-js.production.js';
         
         function loadScript(src, onSuccess, onError) {
           const script = document.createElement('script');
@@ -72,28 +102,28 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="text/babel" src="hooks/useTheme.js"></script>
-    <script type="text/babel" src="components/ThemeSwitcher.js"></script>
-    <script type="text/babel" src="services/apiService.js"></script>
-    <script type="text/babel" src="services/auth0Service.js"></script>
-    <script type="text/babel" src="services/stripeService.js"></script>
-    <script type="text/babel" src="hooks/useAuth.js"></script>
-    <script type="text/babel" src="components/AuthButton.js"></script>
-    <script type="text/babel" src="components/AuthStatusBanner.js"></script>
+    <script type="text/babel" src="/hooks/useTheme.js"></script>
+    <script type="text/babel" src="/components/ThemeSwitcher.js"></script>
+    <script type="text/babel" src="/services/apiService.js"></script>
+    <script type="text/babel" src="/services/auth0Service.js"></script>
+    <script type="text/babel" src="/services/stripeService.js"></script>
+    <script type="text/babel" src="/hooks/useAuth.js"></script>
+    <script type="text/babel" src="/components/AuthButton.js"></script>
+    <script type="text/babel" src="/components/AuthStatusBanner.js"></script>
 
-    <script type="text/babel" src="components/PremiumModal.js"></script>
-    <script type="text/babel" src="components/SidebarAuthButton.js"></script>
-    <script type="text/babel" src="components/TopBarUserProfile.js"></script>
-    <script type="text/babel" src="data/lunar_phases.js"></script>
-    <script type="text/babel" src="components/MessageActions.js"></script>
-    <script type="text/babel" src="components/ConversationStarters.js"></script>
-    <script type="text/babel" src="components/Sidebar.js"></script>
-    <script type="text/babel" src="components/ChatArea.js"></script>
-    <script type="text/babel" src="components/TopBar.js"></script>
-    <script type="text/babel" src="components/Modals.js"></script>
-    <script type="text/babel" src="components/ArchivedSessions.js"></script>
-    <script type="text/babel" src="hooks/useAppLogic.js"></script>
-    <script type="text/babel" src="app.js"></script>
+    <script type="text/babel" src="/components/PremiumModal.js"></script>
+    <script type="text/babel" src="/components/SidebarAuthButton.js"></script>
+    <script type="text/babel" src="/components/TopBarUserProfile.js"></script>
+    <script type="text/babel" src="/data/lunar_phases.js"></script>
+    <script type="text/babel" src="/components/MessageActions.js"></script>
+    <script type="text/babel" src="/components/ConversationStarters.js"></script>
+    <script type="text/babel" src="/components/Sidebar.js"></script>
+    <script type="text/babel" src="/components/ChatArea.js"></script>
+    <script type="text/babel" src="/components/TopBar.js"></script>
+    <script type="text/babel" src="/components/Modals.js"></script>
+    <script type="text/babel" src="/components/ArchivedSessions.js"></script>
+    <script type="text/babel" src="/hooks/useAppLogic.js"></script>
+    <script type="text/babel" src="/app.js"></script>
     <script>
       // Initialize Auth0 with improved error handling and timing
       (async function() {
@@ -125,13 +155,12 @@
           await waitForAuth0SDK();
           console.log('✅ Auth0 SDK loaded successfully');
           
-          // Wait for Auth0 service to be available
-          let serviceAttempts = 0;
-          const maxServiceAttempts = 20;
-          while (!window.initAuth0 && serviceAttempts < maxServiceAttempts) {
-            serviceAttempts++;
-            console.log(`⏳ Waiting for Auth0 service... (attempt ${serviceAttempts}/${maxServiceAttempts})`);
-            await new Promise(resolve => setTimeout(resolve, 100));
+          // Wait for Auth0 service (Babel compilation) - increased time
+          console.log('⏳ Waiting for Auth0 service to compile...');
+          await new Promise(resolve => setTimeout(resolve, 8000)); // Increased to 8 seconds
+          
+          if (!window.initAuth0) {
+            console.warn('⚠️ Auth0 service not ready after 3 seconds, trying anyway...');
           }
           
           // Initialize Auth0
@@ -139,10 +168,7 @@
             await window.initAuth0();
             console.log('✅ Auth0 initialization complete');
             
-            // Initialize other services now that Auth0 is ready
-            if (window.serviceManager) {
-              await window.serviceManager.initializeServices();
-            }
+            // Auth0 ready - other services can initialize as needed
             
             // Remove any existing error banners
             const existingError = document.querySelector('.auth-error-banner');
@@ -171,14 +197,7 @@
             font-family: system-ui, -apple-system, sans-serif;
           `;
           
-          let errorMessage = '⚠️ Authentication service failed to load.';
-          if (error.message.includes('Auth0 SDK failed to load')) {
-            errorMessage += ' Network or CDN issue detected.';
-          } else if (error.message.includes('service not available after waiting')) {
-            errorMessage += ' Service scripts failed to load properly.';
-          } else if (error.message.includes('service not available')) {
-            errorMessage += ' Service initialization failed.';
-          }
+          let errorMessage = '⚠️ Authentication service failed to load. Please refresh the page.';
           
           errorDiv.innerHTML = `
             ${errorMessage} Please refresh the page.
@@ -206,59 +225,6 @@
         }
       })();
     </script>
-    <script>
-      // Service Initialization Coordinator
-      window.serviceManager = {
-        auth0Ready: false,
-        servicesInitialized: false,
-        
-        async initializeServices() {
-          console.log('🚀 Starting service initialization sequence...');
-          
-          try {
-            // Wait for Auth0 to be ready
-            await this.waitForAuth0();
-            this.auth0Ready = true;
-            console.log('✅ Auth0 ready, initializing other services...');
-            
-            // Initialize Stripe service now that Auth0 is ready
-            if (window.stripeService) {
-              await window.stripeService.init();
-              console.log('✅ StripeService initialized');
-            }
-            
-            this.servicesInitialized = true;
-            console.log('✅ All services initialized successfully');
-            
-            // Dispatch event for components that need to know
-            window.dispatchEvent(new CustomEvent('servicesReady'));
-            
-          } catch (error) {
-            console.error('❌ Service initialization failed:', error);
-          }
-        },
-        
-        async waitForAuth0() {
-          let attempts = 0;
-          const maxAttempts = 100; // 10 seconds max wait
-          
-          while (attempts < maxAttempts) {
-            if (window.auth0Ready && window.getAuth0State) {
-              return true;
-            }
-            
-            if (window.auth0InitError) {
-              console.warn('⚠️ Auth0 failed, continuing without auth');
-              return false;
-            }
-            
-            attempts++;
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-          
-          throw new Error('Timeout waiting for Auth0 initialization');
-        }
-      };
-    </script>
+
 </body>
 </html> 

@@ -30,7 +30,6 @@ sys.path.insert(0, str(current_dir))
 
 from core.contextual_rag import OptimizedContextualRAGSystem
 from core.domain_manager import DomainManager
-from utils.semantic_domain_detector import SemanticDomainDetector
 from cache.negative_intent_detector import NegativeIntentDetector
 from cache.qa_cache import QACache
 from utils.logger import logger, set_debug_mode
@@ -47,7 +46,6 @@ llm = init_chat_model("gemini-2.0-flash-001", model_provider="google_genai")
 # Initialize system components
 # TODO: Temporarily using only 'lunar' since 'ifs' is disabled. Re-enable 'ifs' when domains are restored.
 domain_manager = DomainManager(initial_domains={'lunar'})
-semantic_detector = SemanticDomainDetector()
 negative_detector = NegativeIntentDetector()
 qa_cache = QACache()
 rag_system = OptimizedContextualRAGSystem(domain_manager=domain_manager)

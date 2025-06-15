@@ -816,9 +816,12 @@ async def get_lunar_info():
 @app.get("/auth/status", response_model=AuthStatusResponse)
 async def get_auth_status():
     """Get authentication system status"""
+    auth0_status = get_auth0_status()
+    status_text = "configured" if auth0_status.get("enabled") and auth0_status.get("validator_initialized") else "not_configured"
+    
     return AuthStatusResponse(
         auth0_enabled=is_auth0_enabled(),
-        status=get_auth0_status(),
+        status=status_text,
         timestamp=datetime.now()
     )
 
@@ -1056,17 +1059,25 @@ async def get_stripe_config():
         enabled=config.get("enabled", False)
     )
 
+@app.get("/stripe/debug")
+async def debug_stripe():
+    """Debug endpoint to check Stripe service state during request."""
+    # Get the secret key from environment since it's not stored in the service
+    secret_key = os.getenv("STRIPE_SECRET_KEY")
+    return {
+        "enabled": stripe_service.enabled,
+        "has_secret_key": bool(secret_key),
+        "secret_key_preview": secret_key[:10] + "..." if secret_key else None,
+        "has_client": stripe_service.client is not None,
+        "client_type": type(stripe_service.client).__name__ if stripe_service.client else None
+    }
+
 @app.post("/stripe/create-checkout-session", response_model=CheckoutSessionResponse, status_code=status.HTTP_201_CREATED)
 async def create_checkout_session(
     request: CreateCheckoutRequest,
     user: RequiredUser
 ):
-    """Create Stripe checkout session for authenticated user"""
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required for premium upgrade"
-        )
+    """Create Stripe checkout session (requires authentication)"""
     
     # Determine base URL from environment or request headers
     base_url = os.getenv('FRONTEND_URL', 'https://mystical-mentor.beautiful-apps.com')
@@ -1082,8 +1093,8 @@ async def create_checkout_session(
         # Context7 Best Practice: Stripe Python client is synchronous
         session_data = stripe_service.create_checkout_session(
             plan_type=request.plan_type,
-            user_email=user.email or "user@example.com",
-            auth0_user_id=user.sub,
+            user_email=user.email or f"{user.sub}@auth0.local",
+            user_id=user.sub,
             success_url=success_url,
             cancel_url=cancel_url
         )
@@ -1112,7 +1123,7 @@ async def get_user_subscriptions(user: RequiredUser):
     """Get user's Stripe subscriptions"""
     try:
         subscriptions = stripe_service.get_customer_subscriptions(
-            customer_email=user.email or "user@example.com"
+            user_email=user.email or "user@example.com"
         )
         
         return SubscriptionsResponse(

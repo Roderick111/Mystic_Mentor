@@ -455,8 +455,8 @@ requests==2.32.4
     #   posthog
     #   requests-oauthlib
     #   requests-toolbelt
-    #   stripe
-    #   tiktoken
+stripe>=8.0.0,<9.0.0
+    # via esoteric-vectors (pyproject.toml)
 requests-oauthlib==2.0.0
     # via kubernetes
 requests-toolbelt==1.0.0
@@ -496,8 +496,6 @@ stack-data==0.6.3
     # via ipython
 starlette==0.45.3
     # via fastapi
-stripe==12.2.0
-    # via esoteric-vectors (pyproject.toml)
 sympy==1.14.0
     # via onnxruntime
 tenacity==9.1.2

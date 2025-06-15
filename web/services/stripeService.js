@@ -129,16 +129,18 @@ class StripeService {
             const idempotencyKey = this._generateIdempotencyKey(planType);
 
             // Context7 Best Practice: Create session via backend with proper headers
+            // Note: Removed auth cache clearing as it was causing Authorization header to be missing
             const response = await window.apiService.makeRequest('/stripe/create-checkout-session', {
                 method: 'POST',
                 headers: { 
-                    'Content-Type': 'application/json',
                     'Idempotency-Key': idempotencyKey
+                    // Note: Removed Content-Type override to preserve auth headers
+                    // apiService.makeRequest already sets Content-Type: application/json
                 },
                 body: JSON.stringify({ 
-                    plan_type: planType,
-                    // Context7: Include client reference for tracking
-                    client_reference_id: authState.user?.sub || 'anonymous'
+                    plan_type: planType
+                    // Note: client_reference_id removed as backend doesn't expect it
+                    // User identification is handled via JWT authentication
                 })
             });
 
