@@ -21,6 +21,7 @@ from .auth0_middleware import (
     get_auth0_status
 )
 from .stripe_service import stripe_service
+from .auth0_management import auth0_management
 
 __all__ = [
     'OptimizedContextualRAGSystem',
@@ -42,4 +43,6 @@ __all__ = [
     'get_auth0_status',
     # Stripe components
     'stripe_service',
+    # Auth0 Management API
+    'auth0_management',
 ]

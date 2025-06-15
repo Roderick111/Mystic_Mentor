@@ -18,6 +18,7 @@ import json
 import logging
 
 from src.utils.logger import logger
+from .auth0_management import auth0_management
 
 # Load environment variables
 load_dotenv()
@@ -238,7 +239,7 @@ class StripeService:
                 #     detail="HTTPS required for redirect URLs in production"
                 # )
     
-    def handle_webhook(self, payload: bytes, signature: str) -> Dict[str, Any]:
+    async def handle_webhook(self, payload: bytes, signature: str) -> Dict[str, Any]:
         """
         Handle Stripe webhook events with Context7 best practices.
         Enhanced signature verification and error handling.
@@ -276,7 +277,7 @@ class StripeService:
                 return {"status": "ignored", "reason": "no_customer_id"}
             
             # Process the event
-            result = self._process_webhook_event(event, customer_id)
+            result = await self._process_webhook_event(event, customer_id)
             
             logger.debug(f"Webhook processed successfully: {event['type']} (ID: {event.get('id')})")
             return {"status": "processed", "event_type": event['type'], "result": result}
@@ -314,28 +315,28 @@ class StripeService:
         
         return None
     
-    def _process_webhook_event(self, event: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
+    async def _process_webhook_event(self, event: Dict[str, Any], customer_id: str) -> Dict[str, Any]:
         """Process individual webhook events with Context7 patterns."""
         event_type = event['type']
         event_object = event['data']['object']
         
         # Context7 Pattern: Handle both sync and async payment completion
         if event_type in ['checkout.session.completed', 'checkout.session.async_payment_succeeded']:
-            return self._handle_checkout_completed(event_object)
+            return await self._handle_checkout_completed(event_object)
         elif event_type == 'customer.subscription.created':
-            return self._handle_subscription_created(event_object)
+            return await self._handle_subscription_created(event_object)
         elif event_type == 'customer.subscription.updated':
-            return self._handle_subscription_updated(event_object)
+            return await self._handle_subscription_updated(event_object)
         elif event_type == 'customer.subscription.deleted':
-            return self._handle_subscription_canceled(event_object)
+            return await self._handle_subscription_canceled(event_object)
         elif event_type in ['invoice.paid', 'payment_intent.succeeded']:
-            return self._handle_payment_succeeded(event_object)
+            return await self._handle_payment_succeeded(event_object)
         elif event_type in ['invoice.payment_failed', 'payment_intent.payment_failed']:
             return self._handle_payment_failed(event_object)
         else:
             return {"action": "logged", "message": f"Event {event_type} logged but no specific action taken"}
     
-    def _handle_checkout_completed(self, session: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_checkout_completed(self, session: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handle successful checkout completion.
         Context7 Pattern: Enhanced metadata extraction and validation.
@@ -354,7 +355,7 @@ class StripeService:
         
         if payment_mode == 'payment' or plan_type == "lifetime":
             # For one-time payments (lifetime), assign role immediately
-            success = self._assign_premium_role(auth0_user_id, "premium-lifetime")
+            success = await self._assign_premium_role(auth0_user_id, "lifetime")
             return {
                 "status": "success" if success else "partial",
                 "user_id": auth0_user_id,
@@ -372,7 +373,7 @@ class StripeService:
             "note": "waiting_for_subscription_creation"
         }
     
-    def _handle_subscription_created(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_subscription_created(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
         """Handle new subscription creation with Context7 patterns."""
         metadata = subscription.get('metadata', {})
         auth0_user_id = metadata.get('auth0_user_id')
@@ -385,7 +386,7 @@ class StripeService:
         logger.debug(f"Subscription created for user {auth0_user_id}")
         
         # Assign premium role
-        success = self._assign_premium_role(auth0_user_id, "premium-monthly")
+        success = await self._assign_premium_role(auth0_user_id, "monthly")
         
         return {
             "status": "success" if success else "partial",
@@ -395,7 +396,7 @@ class StripeService:
             "role_assigned": success
         }
     
-    def _handle_subscription_updated(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_subscription_updated(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
         """Handle subscription updates with Context7 patterns."""
         metadata = subscription.get('metadata', {})
         auth0_user_id = metadata.get('auth0_user_id')
@@ -408,9 +409,9 @@ class StripeService:
         
         # Context7 Pattern: Handle all subscription statuses
         if status in ['active', 'trialing']:
-            success = self._assign_premium_role(auth0_user_id, "premium-monthly")
+            success = await self._assign_premium_role(auth0_user_id, "monthly")
         elif status in ['canceled', 'unpaid', 'past_due', 'incomplete_expired']:
-            success = self._remove_premium_role(auth0_user_id)
+            success = await self._remove_premium_role(auth0_user_id)
         elif status in ['incomplete', 'paused']:
             # Don't change role for these statuses
             return {"status": "ignored", "reason": f"status_{status}_no_action"}
@@ -424,7 +425,7 @@ class StripeService:
             "role_updated": success
         }
     
-    def _handle_subscription_canceled(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_subscription_canceled(self, subscription: Dict[str, Any]) -> Dict[str, Any]:
         """Handle subscription cancellation with Context7 patterns."""
         metadata = subscription.get('metadata', {})
         auth0_user_id = metadata.get('auth0_user_id')
@@ -435,7 +436,7 @@ class StripeService:
         logger.debug(f"Subscription canceled for user {auth0_user_id}")
         
         # Remove premium role
-        success = self._remove_premium_role(auth0_user_id)
+        success = await self._remove_premium_role(auth0_user_id)
         
         return {
             "status": "success" if success else "partial",
@@ -444,7 +445,7 @@ class StripeService:
             "role_removed": success
         }
     
-    def _handle_payment_succeeded(self, payment_object: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_payment_succeeded(self, payment_object: Dict[str, Any]) -> Dict[str, Any]:
         """Handle successful payment with Context7 patterns."""
         metadata = payment_object.get('metadata', {})
         auth0_user_id = metadata.get('auth0_user_id')
@@ -456,7 +457,7 @@ class StripeService:
         
         # Context7 Pattern: Ensure user has premium access
         # This handles edge cases where subscription events might be missed
-        success = self._assign_premium_role(auth0_user_id, "premium-monthly")
+        success = await self._assign_premium_role(auth0_user_id, "monthly")
         
         return {
             "status": "success" if success else "partial",
@@ -486,37 +487,53 @@ class StripeService:
             "note": "access_maintained_pending_retry"
         }
     
-    def _assign_premium_role(self, auth0_user_id: str, role: str) -> bool:
+    async def _assign_premium_role(self, auth0_user_id: str, subscription_type: str) -> bool:
         """
-        Assign premium role to user in Auth0.
+        Assign premium role to user in Auth0 using Management API.
         
-        Note: This is a placeholder. In production, you would:
-        1. Use Auth0 Management API to assign roles
-        2. Update user metadata
-        3. Possibly trigger email notifications
+        Args:
+            auth0_user_id: Auth0 user ID (sub)
+            subscription_type: Subscription type (monthly, lifetime)
+            
+        Returns:
+            bool: Success status
         """
         try:
-            logger.debug(f"Would assign role '{role}' to user {auth0_user_id}")
-            # TODO: Implement Auth0 Management API integration
-            # auth0_management.assign_role(auth0_user_id, role)
-            return True
+            # Use Auth0 Management API to assign premium role
+            success = await auth0_management.assign_premium_role(auth0_user_id, subscription_type)
+            
+            if success:
+                logger.info(f"✅ Premium role '{subscription_type}' assigned to user {auth0_user_id}")
+            else:
+                logger.error(f"❌ Failed to assign premium role '{subscription_type}' to user {auth0_user_id}")
+            
+            return success
         except Exception as e:
-            logger.error(f"❌ Failed to assign role: {e}")
+            logger.error(f"❌ Error assigning premium role: {e}")
             return False
     
-    def _remove_premium_role(self, auth0_user_id: str) -> bool:
+    async def _remove_premium_role(self, auth0_user_id: str) -> bool:
         """
-        Remove premium role from user in Auth0.
+        Remove premium role from user in Auth0 using Management API.
         
-        Note: This is a placeholder for Auth0 Management API integration.
+        Args:
+            auth0_user_id: Auth0 user ID (sub)
+            
+        Returns:
+            bool: Success status
         """
         try:
-            logger.debug(f"Would remove premium role from user {auth0_user_id}")
-            # TODO: Implement Auth0 Management API integration
-            # auth0_management.remove_role(auth0_user_id, role)
-            return True
+            # Use Auth0 Management API to remove premium status
+            success = await auth0_management.remove_premium_role(auth0_user_id)
+            
+            if success:
+                logger.info(f"✅ Premium role removed from user {auth0_user_id}")
+            else:
+                logger.error(f"❌ Failed to remove premium role from user {auth0_user_id}")
+            
+            return success
         except Exception as e:
-            logger.error(f"❌ Failed to remove role: {e}")
+            logger.error(f"❌ Error removing premium role: {e}")
             return False
     
     def get_customer_subscriptions(self, user_email: str) -> List[Dict[str, Any]]:

@@ -44,6 +44,7 @@ from src.core import (
     is_auth0_enabled,
     stripe_service,
     user_sync_service,
+    auth0_management,
 )
 from src.utils.logger import logger
 
@@ -1155,7 +1156,7 @@ async def stripe_webhook(request: Request):
             )
         
         # Process webhook (now returns detailed result instead of raising exceptions)
-        result = stripe_service.handle_webhook(payload, signature)
+        result = await stripe_service.handle_webhook(payload, signature)
         
         # Log webhook processing result
         if result.get("status") == "processed":
@@ -1172,6 +1173,43 @@ async def stripe_webhook(request: Request):
         logger.error(f"❌ Webhook processing failed: {e}")
         # Still return 200 to prevent Stripe retries for non-recoverable errors
         return WebhookResponse(received=True, error=str(e))
+
+@app.get("/auth/premium-status", response_model=Dict[str, Any])
+async def get_user_premium_status(user: RequiredUser):
+    """Get current user's premium status"""
+    try:
+        status = await auth0_management.get_user_premium_status(user.sub)
+        return {
+            "success": True,
+            "user_id": user.sub,
+            "premium_status": status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        web_logger.error(f"Error getting premium status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get premium status"
+        )
+
+@app.get("/admin/premium-users", response_model=Dict[str, Any])
+async def list_premium_users(user: RequiredUser):
+    """List all premium users (admin only)"""
+    try:
+        # TODO: Add admin role check here
+        premium_users = await auth0_management.list_premium_users()
+        return {
+            "success": True,
+            "premium_users": premium_users,
+            "count": len(premium_users),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        web_logger.error(f"Error listing premium users: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list premium users"
+        )
 
 @app.get("/stripe/verify-session/{session_id}", response_model=VerifySessionResponse)
 async def verify_checkout_session(session_id: str):

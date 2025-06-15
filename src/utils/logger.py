@@ -82,6 +82,10 @@ class EsotericLogger:
         """Log warnings (always shown)."""
         print(f"⚠️ {message}")
     
+    def info(self, message: str):
+        """Log info messages (always shown)."""
+        print(f"ℹ️ {message}")
+    
     def negative_intent(self, query_preview: str):
         """Log negative intent detection (always shown)."""
         print(f"🛡️ Negative intent detected - bypassing Q&A cache, using RAG for: '{query_preview}...'")
