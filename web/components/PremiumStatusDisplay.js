@@ -97,7 +97,7 @@ const PremiumStatusDisplay = () => {
                     {showDetails && (
                         <>
                             {/* Plan Details */}
-                            <div className="text-xs space-y-2 border-t border-white/20 pt-3">
+                            <div className="text-xs space-y-2 pt-3">
                                 <div className="flex justify-between items-center">
                                     <span className="opacity-80">Plan:</span>
                                     <span className="font-medium capitalize">{planType}</span>
@@ -120,7 +120,7 @@ const PremiumStatusDisplay = () => {
                             </div>
 
                             {/* Benefits Section */}
-                            <div className="border-t border-white/20 pt-3">
+                            <div className="pt-3">
                                 <div className="text-xs opacity-80 mb-2">Premium Benefits:</div>
                                 <div className="space-y-1 text-xs">
                                     <div className="flex items-center space-x-2">
