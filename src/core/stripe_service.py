@@ -178,29 +178,42 @@ class StripeService:
             # Generate idempotency key
             idempotency_key = f"checkout_{user_id}_{plan_type}_{int(datetime.now().timestamp())}"
             
-            # v8+ syntax: Create checkout session with params={}
-            session = self.client.checkout.sessions.create(
-                params={
-                    "success_url": success_url,
-                    "cancel_url": cancel_url,
-                    "payment_method_types": ["card"],
-                    "line_items": [
-                        {
-                            "price": price_id,
-                            "quantity": 1,
-                        }
-                    ],
-                    "mode": mode,
-                    "customer": customer_id,
-                    "customer_update": {
-                        "address": "auto"
-                    },
+            # Create checkout session parameters
+            session_params = {
+                "success_url": success_url,
+                "cancel_url": cancel_url,
+                "payment_method_types": ["card"],
+                "line_items": [
+                    {
+                        "price": price_id,
+                        "quantity": 1,
+                    }
+                ],
+                "mode": mode,
+                "customer": customer_id,
+                "customer_update": {
+                    "address": "auto"
+                },
+                "metadata": {
+                    "auth0_user_id": user_id,
+                    "plan_type": plan_type,
+                    "created_via": "esoteric_vectors_api"
+                }
+            }
+            
+            # For subscription mode, ensure subscription inherits metadata
+            if mode == "subscription":
+                session_params["subscription_data"] = {
                     "metadata": {
                         "auth0_user_id": user_id,
                         "plan_type": plan_type,
                         "created_via": "esoteric_vectors_api"
                     }
-                },
+                }
+            
+            # v8+ syntax: Create checkout session with params={}
+            session = self.client.checkout.sessions.create(
+                params=session_params,
                 options={
                     "idempotency_key": idempotency_key
                 }
