@@ -1,14 +1,15 @@
 /**
  * SidebarAuthButton.js - Sidebar Premium Button Component
- * Purpose: Shows sign-in button for anonymous users and Go Premium button for authenticated users.
+ * Purpose: Shows sign-in button for anonymous users, PremiumStatusDisplay for premium users, and Go Premium button for authenticated non-premium users.
  * Profile management is now handled via the top bar user profile dropdown.
  */
 const SidebarAuthButton = () => {
     const { isAuthenticated, isLoading, login } = useAuth();
+    const { isPremium, isLoading: premiumLoading } = window.usePremiumStatus();
     const [showPremiumModal, setShowPremiumModal] = React.useState(false);
 
     // Show loading state
-    if (isLoading) {
+    if (isLoading || premiumLoading) {
         return (
             <div className="w-full p-3 bg-gray-700 rounded-lg animate-pulse">
                 <div className="h-4 bg-gray-600 rounded"></div>
@@ -31,7 +32,12 @@ const SidebarAuthButton = () => {
         );
     }
 
-    // Authenticated - show Go Premium button
+    // Authenticated and premium - show premium status display
+    if (isPremium) {
+        return <window.PremiumStatusDisplay />;
+    }
+
+    // Authenticated but not premium - show Go Premium button
     const handleGoPremium = () => {
         setShowPremiumModal(true);
     };
