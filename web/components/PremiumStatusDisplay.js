@@ -144,7 +144,7 @@ const PremiumStatusDisplay = () => {
 
                             {/* Management Button - only for monthly subscriptions */}
                             {planType === 'monthly' && (
-                                <div className="border-t border-white/20 pt-3">
+                                <div className="pt-3">
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
