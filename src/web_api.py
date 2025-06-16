@@ -1087,7 +1087,7 @@ async def create_checkout_session(
     if not base_url or base_url == 'localhost':
         base_url = "https://localhost:8443"
     
-    success_url = f"{base_url}?payment=success&plan={request.plan_type}"
+    success_url = f"{base_url}?payment=success&plan={request.plan_type}&session_id={{CHECKOUT_SESSION_ID}}"
     cancel_url = f"{base_url}?payment=canceled"
     
     try:

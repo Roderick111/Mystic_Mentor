@@ -199,8 +199,41 @@ class StripeService {
             const cleanUrl = window.location.pathname;
             window.history.replaceState({}, document.title, cleanUrl);
 
-            if (paymentStatus === 'success' || sessionId) {
-                // Context7: Verify session on backend for security
+            if (paymentStatus === 'success') {
+                // Handle payment success even without session_id
+                if (sessionId) {
+                    // Context7: Verify session on backend for security if we have session_id
+                    try {
+                        const verification = await window.apiService.makeRequest(
+                            `/stripe/verify-session/${sessionId}`
+                        );
+                        
+                        return {
+                            status: 'success',
+                            sessionId: sessionId,
+                            verified: verification.success,
+                            message: 'Payment successful! Premium features activated.'
+                        };
+                    } catch (error) {
+                        console.warn('Session verification failed:', error);
+                        return {
+                            status: 'success',
+                            sessionId: sessionId,
+                            verified: false,
+                            message: 'Payment completed. Verifying activation...'
+                        };
+                    }
+                } else {
+                    // No session_id, but payment was successful based on URL parameter
+                    return {
+                        status: 'success',
+                        sessionId: null,
+                        verified: false,
+                        message: 'Payment successful! Activating premium features...'
+                    };
+                }
+            } else if (sessionId && !paymentStatus) {
+                // We have session_id but no payment status - verify session
                 try {
                     const verification = await window.apiService.makeRequest(
                         `/stripe/verify-session/${sessionId}`
