@@ -70,7 +70,7 @@ const PremiumStatusDisplay = () => {
         <div className="w-full">
             {/* Single Premium Status Container */}
             <div 
-                className={`w-full p-4 bg-gradient-to-r ${statusInfo.color} rounded-lg cursor-pointer transition-all duration-200 hover:border hover:border-white/40`}
+                className={`w-full p-4 bg-gradient-to-r ${statusInfo.color} rounded-lg cursor-pointer transition-all duration-200 border border-transparent hover:border-white/40`}
                 onClick={() => setShowDetails(!showDetails)}
             >
                 <div className="text-white space-y-3">
