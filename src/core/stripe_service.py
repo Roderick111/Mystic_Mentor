@@ -196,7 +196,7 @@ class StripeService:
                         "address": "auto"
                     },
                     "metadata": {
-                        "user_id": user_id,
+                        "auth0_user_id": user_id,
                         "plan_type": plan_type,
                         "created_via": "esoteric_vectors_api"
                     }
