@@ -74,7 +74,7 @@ const PremiumStatusDisplay = () => {
                 onClick={() => setShowDetails(!showDetails)}
             >
                 <div className="text-white space-y-3">
-                    {/* Header with title and expand button */}
+                    {/* Header with title and expand button - Always visible */}
                     <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                             <span className="text-lg">{statusInfo.emoji}</span>
@@ -93,34 +93,34 @@ const PremiumStatusDisplay = () => {
                         </svg>
                     </div>
 
-                    {/* Plan Details - always visible */}
-                    <div className="text-xs space-y-2 border-t border-white/20 pt-3">
-                        <div className="flex justify-between items-center">
-                            <span className="opacity-80">Plan:</span>
-                            <span className="font-medium capitalize">{planType}</span>
-                        </div>
-                        
-                        {premiumStatus?.premium_activated_at && (
-                            <div className="flex justify-between items-center">
-                                <span className="opacity-80">Activated:</span>
-                                <span className="font-medium">{formatActivationDate(premiumStatus.premium_activated_at)}</span>
-                            </div>
-                        )}
-
-                        <div className="flex justify-between items-center">
-                            <span className="opacity-80">Status:</span>
-                            <div className="flex items-center space-x-1">
-                                <div className="w-2 h-2 bg-white rounded-full"></div>
-                                <span className="font-medium">Active</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Expanded Benefits Section */}
+                    {/* Expanded Details Section - Only visible when showDetails is true */}
                     {showDetails && (
-                        <div className="border-t border-white/20 pt-3 space-y-3">
-                            {/* Benefits */}
-                            <div>
+                        <>
+                            {/* Plan Details */}
+                            <div className="text-xs space-y-2 border-t border-white/20 pt-3">
+                                <div className="flex justify-between items-center">
+                                    <span className="opacity-80">Plan:</span>
+                                    <span className="font-medium capitalize">{planType}</span>
+                                </div>
+                                
+                                {premiumStatus?.premium_activated_at && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="opacity-80">Activated:</span>
+                                        <span className="font-medium">{formatActivationDate(premiumStatus.premium_activated_at)}</span>
+                                    </div>
+                                )}
+
+                                <div className="flex justify-between items-center">
+                                    <span className="opacity-80">Status:</span>
+                                    <div className="flex items-center space-x-1">
+                                        <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                                        <span className="font-medium">Active</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Benefits Section */}
+                            <div className="border-t border-white/20 pt-3">
                                 <div className="text-xs opacity-80 mb-2">Premium Benefits:</div>
                                 <div className="space-y-1 text-xs">
                                     <div className="flex items-center space-x-2">
@@ -151,7 +151,7 @@ const PremiumStatusDisplay = () => {
                                             // TODO: Implement subscription management
                                             console.log('Open subscription management');
                                         }}
-                                        className="w-full px-3 py-2 text-xs bg-white/20 hover:bg-white/30 rounded transition-colors text-white"
+                                        className="w-full px-3 py-2 text-xs bg-white hover:bg-white/90 rounded transition-colors text-gray-800 font-medium"
                                     >
                                         <div className="flex items-center justify-center space-x-2">
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +163,7 @@ const PremiumStatusDisplay = () => {
                                     </button>
                                 </div>
                             )}
-                        </div>
+                        </>
                     )}
                 </div>
             </div>
