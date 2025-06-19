@@ -8,6 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+venv/
+env/
 
 # Environment and secrets files
 .env
@@ -31,3 +33,108 @@ logs/
 Thumbs.db
 *.tmp
 *.temp
+
+# Database files
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+
+# Docker volumes and data
+data/chroma_db/
+data/sessions/
+data/qa_cache/
+nginx/logs/
+nginx/ssl/
+data/
+
+# Node.js (if you add frontend dependencies)
+node_modules/
+package-lock.json
+yarn.lock
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker build cache
+.dockerignore
+
+# Backup files
+*_backup_*/
+*.backup
+*.bak
+
+# ChromaDB specific
+data/chroma_db_backup_*/
+data/document_registry.json
+
+# Testing and Coverage
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Python cache directories
+.mypy_cache/
+.pyre/
+.pytype/
+.dmypy.json
+dmypy.json
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+
+# Editor temporary files
+*~
+.#*
+#*#
+.*.swp
+.*.swo
+*.orig
+
+# Docker specific
+docker-compose.override.yml
+.docker/
+
+# Security and secrets
+*.key
+*.pem
+*.p12
+*.crt
+secrets/
+credentials/
+
+# API documentation
+openapi.json
+
+# Temporary upload files
+uploads/
+temp_uploads/
+
+# Memory dumps and profiling
+*.prof
+*.hprof
+*.dump
+
+# Local development tools
+.tool-versions
+.envrc
