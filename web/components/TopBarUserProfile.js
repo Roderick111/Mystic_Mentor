@@ -89,14 +89,18 @@ const TopBarUserProfile = ({
                                         )}
                                     </div>
                                     <div className="flex-1 min-w-0">
+                                        <div className="flex items-center space-x-2">
                                         <div className="text-sm font-medium text-white truncate">
                                             {user?.name || 'User'}
+                                            </div>
+                                            <window.PremiumBadge size="xs" />
                                         </div>
                                         {user?.email && (
                                             <div className="text-xs text-gray-400 truncate">
                                                 {user.email}
                                             </div>
                                         )}
+                                        <window.PremiumStatusIndicator user={user} />
                                     </div>
                                 </div>
                             </div>

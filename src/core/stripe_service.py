@@ -140,8 +140,8 @@ class StripeService:
             )
     
     def create_checkout_session(
-        self,
-        plan_type: str,
+        self, 
+        plan_type: str, 
         user_email: str,
         user_id: str,
         success_url: str,
@@ -589,29 +589,97 @@ class StripeService:
             return []
     
     def cancel_subscription(self, subscription_id: str) -> Dict[str, Any]:
-        """Cancel a subscription using v8+ syntax"""
+        """Cancel subscription with v8+ syntax"""
         try:
-            # v8+ syntax: Cancel subscription
+            logger.debug(f"🚫 Canceling subscription: {subscription_id}")
+            
+            # Cancel subscription immediately - v8+ syntax
             subscription = self.client.subscriptions.cancel(
                 subscription_id,
-                params={
-                    "prorate": True
-                }
+                params={}
             )
             
-            logger.info(f"✅ Subscription cancelled: {subscription_id}")
-            
+            logger.debug(f"✅ Subscription {subscription_id} canceled")
             return {
                 "success": True,
                 "subscription_id": subscription.id,
-                "status": subscription.status
+                "status": subscription.status,
+                "canceled_at": subscription.canceled_at
             }
-            
         except Exception as e:
-            logger.error(f"❌ Failed to cancel subscription: {e}")
+            logger.error(f"❌ Subscription cancellation failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to cancel subscription: {str(e)}"
+                detail=f"Subscription cancellation failed: {str(e)}"
+            )
+    
+    def create_portal_session(self, user_email: str, return_url: str) -> Dict[str, Any]:
+        """
+        Create Stripe Customer Portal session for subscription management.
+        Context7 Pattern: Modern billing portal implementation with v8+ syntax.
+        
+        Args:
+            user_email: Customer's email address
+            return_url: URL to redirect after portal session
+            
+        Returns:
+            Dict containing portal URL and session info
+        """
+        try:
+            logger.debug(f"🏛️ Creating Customer Portal session for {user_email}")
+            
+            # Find existing customer
+            customers = self.client.customers.list(
+                params={
+                    "email": user_email,
+                    "limit": 1
+                }
+            )
+            
+            if not customers.data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Customer not found. Please create a subscription first."
+                )
+            
+            customer_id = customers.data[0].id
+            logger.debug(f"📧 Found customer: {customer_id}")
+            
+            # Create billing portal session with v8+ syntax
+            portal_session = self.client.billing_portal.sessions.create(
+                params={
+                    "customer": customer_id,
+                    "return_url": return_url
+                }
+            )
+            
+            logger.debug(f"✅ Portal session created: {portal_session.stripe_id}")
+            
+            return {
+                "success": True,
+                "portal_url": portal_session.url,
+                "portal_session_id": portal_session.stripe_id,
+                "customer_id": customer_id,
+                "expires_at": getattr(portal_session, 'expires_at', None)
+            }
+            
+        except HTTPException:
+            # Re-raise HTTP exceptions
+            raise
+        except Exception as e:
+            logger.error(f"❌ Portal session creation failed: {e}")
+            
+            # Handle specific Stripe configuration errors
+            error_message = str(e)
+            if "No configuration provided" in error_message and "customer portal settings" in error_message:
+                raise HTTPException(
+                    status_code=status.HTTP_424_FAILED_DEPENDENCY,
+                    detail="Stripe Customer Portal not configured. Please configure the Customer Portal in your Stripe Dashboard at https://dashboard.stripe.com/test/settings/billing/portal (test mode) or https://dashboard.stripe.com/settings/billing/portal (live mode)."
+                )
+            
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Portal session creation failed: {str(e)}"
             )
     
     def verify_session(self, session_id: str) -> Dict[str, Any]:

@@ -1,13 +1,15 @@
-# Production Docker Compose for Esoteric Vectors
-# Pulls image from Docker Hub: daniel1mathias/esoteric-vectors:latest
-# Domain: mystical-mentor.beautiful-apps.com (HTTPS)
+# Docker Compose configuration for Esoteric Vectors application
+# Production-ready setup with nginx reverse proxy, backend API, and persistent data
+# Domain: mystical-mentor.beautiful-apps.com
 
 version: '3.8'
 
 services:
-  # Backend FastAPI application (from Docker Hub)
+  # Backend FastAPI application
   backend:
-    image: daniel1mathias/esoteric-vectors:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: esoteric-backend
     restart: unless-stopped
     environment:
@@ -31,15 +33,9 @@ services:
       - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       
-      # OpenAI settings (from environment)
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      
-      # Google AI settings (from environment)
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      
-      # Application URLs
-      - FRONTEND_URL=https://mystical-mentor.beautiful-apps.com
-      - BACKEND_URL=http://mystical-mentor.beautiful-apps.com/api
+      # Application URLs (updated for your domain)
+      - FRONTEND_URL=${FRONTEND_URL:-https://mystical-mentor.beautiful-apps.com}
+      - BACKEND_URL=${BACKEND_URL:-https://mystical-mentor.beautiful-apps.com/api}
       
       # Database and storage paths
       - DATA_PATH=/app/data
@@ -49,8 +45,11 @@ services:
       
     volumes:
       # Persistent data storage
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - app_data:/app/data
+      - app_logs:/app/logs
+      
+      # SSL certificates (if using custom certs)
+      - ./ssl:/app/ssl:ro
       
       # Configuration files
       - ./.env:/app/.env:ro
@@ -68,6 +67,8 @@ services:
       retries: 3
       start_period: 40s
     
+    # Remove nginx dependency to avoid circular dependency
+    
     # Resource limits
     deploy:
       resources:
@@ -78,27 +79,27 @@ services:
           memory: 512M
           cpus: '0.5'
 
-  # Nginx reverse proxy with HTTPS
+  # Nginx reverse proxy and static file server
   nginx:
     image: nginx:alpine
     container_name: esoteric-nginx
     restart: unless-stopped
     ports:
-      - "80:80"     # HTTP (redirects to HTTPS)
-      - "443:443"   # HTTPS
+      - "80:80"
+      - "443:443"
     
     volumes:
       # Nginx configuration
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       
+      # SSL certificates (updated paths for your domain)
+      - ./ssl:/etc/nginx/ssl:ro
+      
       # Static web files
-      - ./web:/usr/share/nginx/html:ro
+      - ./web:/usr/share/nginx/html/web
       
       # Nginx logs
-      - ./nginx/logs:/var/log/nginx
-      
-      # Mount Let's Encrypt SSL certificates
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - nginx_logs:/var/log/nginx
     
     networks:
       - esoteric_network
@@ -108,9 +109,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    
-    depends_on:
-      - backend
     
     # Resource limits
     deploy:
@@ -122,15 +120,29 @@ services:
           memory: 64M
           cpus: '0.1'
 
+# Named volumes for persistent data
+volumes:
+  app_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  
+  app_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
+  
+  nginx_logs:
+    driver: local
+
 # Custom network for service communication
 networks:
   esoteric_network:
     driver: bridge
-    name: esoteric_network
-
-# Resource limits and monitoring
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3" 
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16 

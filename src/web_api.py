@@ -242,6 +242,18 @@ class CancelSubscriptionRequest(BaseModel):
     """Cancel subscription request model"""
     subscription_id: str
 
+class PortalSessionRequest(BaseModel):
+    """Customer Portal session request model"""
+    return_url: Optional[str] = None
+
+class PortalSessionResponse(BaseModel):
+    """Customer Portal session response model"""
+    success: bool
+    portal_url: str
+    portal_session_id: str
+    customer_id: str
+    expires_at: Optional[int] = None
+
 # ==================== UTILITY FUNCTIONS ====================
 
 def get_graph_and_session_manager():
@@ -1263,6 +1275,46 @@ async def cancel_user_subscription(user: RequiredUser, request: CancelSubscripti
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to cancel subscription"
+        )
+
+@app.post("/stripe/customer-portal", response_model=PortalSessionResponse, status_code=status.HTTP_201_CREATED)
+async def create_customer_portal_session(
+    request: PortalSessionRequest,
+    user: RequiredUser
+):
+    """Create a Stripe customer portal session"""
+    try:
+        # Determine base URL from environment or request headers
+        base_url = os.getenv('FRONTEND_URL', 'https://mystical-mentor.beautiful-apps.com')
+        
+        # Fallback to localhost for development
+        if not base_url or base_url == 'localhost':
+            base_url = "https://localhost:8443"
+        
+        # Create customer portal session
+        session_data = stripe_service.create_portal_session(
+            user_email=user.email or f"{user.sub}@auth0.local",
+            return_url=request.return_url or f"{base_url}/dashboard"
+        )
+        
+        logger.debug(f"✅ Customer portal session created for user {user.sub}: {session_data['portal_session_id']}")
+        
+        return PortalSessionResponse(
+            success=True,
+            portal_url=session_data["portal_url"],
+            portal_session_id=session_data["portal_session_id"],
+            customer_id=session_data["customer_id"],
+            expires_at=session_data.get("expires_at")
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions from stripe_service
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error creating customer portal session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create customer portal session"
         )
 
 if __name__ == "__main__":
